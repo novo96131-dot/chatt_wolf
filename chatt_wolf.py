@@ -35,7 +35,7 @@ import urllib.parse
 from _thread import start_new_thread
 import threading
 
-version_str = "CHAT 1.7"
+version_str = "CHAT 1.8"
 
 # ── Auto-update / crash-recovery config ───────────────────────────────────────
 APW_GITHUB_RAW   = "https://raw.githubusercontent.com/novo96131-dot/chatt_wolf/main"
