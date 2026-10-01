@@ -2627,4 +2627,4 @@ class ChatWolfPlugin(babase.Plugin):
                 _babase.pushcall(_notify, from_other_thread=True)
             except Exception:
                 pass
-        start_new_thread(_repair_thread, ())                pass
+        start_new_thread(_repair_thread, ())
