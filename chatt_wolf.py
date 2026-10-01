@@ -39,6 +39,7 @@ version_str = "CHAT 1.7"
 
 # ── Auto-update / crash-recovery config ───────────────────────────────────────
 APW_GITHUB_RAW   = "https://raw.githubusercontent.com/novo96131-dot/chatt_wolf/main"
+APW_VERSION_URL  = APW_GITHUB_RAW + "/version.json"
 APW_PLUGIN_URL   = APW_GITHUB_RAW + "/chatt_wolf.py"
 APW_UPDATE_CHECK = True
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2585,7 +2586,7 @@ class AlphaPartyWindow(bui.Window):
 
 # ba_meta export babase.Plugin
 
-class AlphaPartyWindowPlugin(babase.Plugin):
+class ChatWolfPlugin(babase.Plugin):
     def __init__(self):
         try:
             bs.connect_to_party = newconnect_to_party
@@ -2627,4 +2628,3 @@ class AlphaPartyWindowPlugin(babase.Plugin):
             except Exception:
                 pass
         start_new_thread(_repair_thread, ())                pass
-        start_new_thread(_repair_thread, ())
