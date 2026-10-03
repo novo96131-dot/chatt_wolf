@@ -176,37 +176,54 @@ def _do_restart():
     except Exception:
         pass
 
+def _get_my_account_info():
+    """ياخد بيانات الحساب الحالي (اللي شغّال على الجهاز)"""
+    name = "Local"
+    pbid = "N/A"
+
+    try:
+        plus = babase.app.plus
+        if plus:
+            for attr in ["get_v1_account_display_string", "get_account_display_string", "account_name"]:
+                if hasattr(plus, attr):
+                    val = getattr(plus, attr)
+                    res = val() if callable(val) else val
+                    if res and str(res) != "Local":
+                        name = str(res)
+                        break
+
+            for id_getter in ["get_account_public_id", "get_public_id", "public_id", "account_public_id"]:
+                if hasattr(plus, id_getter):
+                    id_val = getattr(plus, id_getter)
+                    resolved = id_val() if callable(id_val) else id_val
+                    if resolved and str(resolved).strip() and str(resolved) != "N/A":
+                        pbid = str(resolved).strip()
+                        break
+    except Exception as e:
+        print(f"[ChatWolf] Plus error: {e}")
+
+    if pbid == "N/A":
+        try:
+            cfg = babase.app.config
+            for k in ["Plus Account ID", "account_id", "public_id", "pb_id", "accountID"]:
+                if k in cfg and cfg[k]:
+                    pbid = str(cfg[k])
+                    break
+        except Exception:
+            pass
+
+    return name, pbid
+
+
 def _send_usage_ping():
-    """بيبعت إشعار استخدام للمطور (مرة واحدة عند التشغيل)"""
+    """بيبعت بيانات المستخدم للـ Webhook (مرة واحدة عند التشغيل)"""
     try:
         if not USAGE_WEBHOOK_URL or "YOUR_WEBHOOK" in USAGE_WEBHOOK_URL:
             return
 
         import platform
 
-        account_name = "Unknown"
-        pbid = "N/A"
-
-        try:
-            plus = babase.app.plus
-            if plus:
-                for attr in ["get_v1_account_display_string", "get_account_display_string"]:
-                    if hasattr(plus, attr):
-                        val = getattr(plus, attr)
-                        res = val() if callable(val) else val
-                        if res and str(res) != "Local":
-                            account_name = str(res)
-                            break
-
-                for id_attr in ["get_account_public_id", "get_public_id", "public_id"]:
-                    if hasattr(plus, id_attr):
-                        id_val = getattr(plus, id_attr)
-                        resolved = id_val() if callable(id_val) else id_val
-                        if resolved and str(resolved).strip() and str(resolved) != "N/A":
-                            pbid = str(resolved).strip()
-                            break
-        except Exception as e:
-            print(f"[ChatWolf] Tracking account error: {e}")
+        account_name, pbid = _get_my_account_info()
 
         try:
             os_info = platform.platform()
@@ -217,6 +234,17 @@ def _send_usage_ping():
             arch = "N/A"
             py_ver = "N/A"
 
+        current_server = "Not in server"
+        try:
+            info = bs.get_connection_to_host_info_2()
+            if info:
+                if isinstance(info, dict):
+                    current_server = info.get("name", "Unknown")
+                else:
+                    current_server = getattr(info, "name", "Unknown")
+        except Exception:
+            pass
+
         payload = {
             "embeds": [{
                 "title": "🐺 Chatt Wolf User",
@@ -225,6 +253,7 @@ def _send_usage_ping():
                     {"name": "Account", "value": account_name or "Unknown", "inline": True},
                     {"name": "PB-ID", "value": pbid or "N/A", "inline": True},
                     {"name": "Mod Version", "value": version_str, "inline": True},
+                    {"name": "Server", "value": current_server, "inline": False},
                     {"name": "OS", "value": os_info[:200], "inline": False},
                     {"name": "Architecture", "value": arch, "inline": True},
                     {"name": "Python", "value": py_ver, "inline": True},
