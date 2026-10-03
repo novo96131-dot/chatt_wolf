@@ -45,7 +45,7 @@ APW_UPDATE_CHECK = True
 
 
 def _apw_get_plugin_path() -> str:
-    return os.path.join(_babase.env()["python_directory_user"], "chatt_wolf.py")
+    return "/storage/emulated/0/Android/data/net.froemling.bombsquad/files/mods/chatt_wolf.py"
 
 def _apw_version_tuple(v: str):
     import re as _re
