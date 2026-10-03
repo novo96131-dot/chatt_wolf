@@ -35,14 +35,13 @@ import urllib.parse
 from _thread import start_new_thread
 import threading
 
-version_str = "CHAT 1.8"
+version_str = "1.8"
+BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
 
-# ── Auto-update / crash-recovery config ───────────────────────────────────────
 APW_GITHUB_RAW   = "https://raw.githubusercontent.com/novo96131-dot/chatt_wolf/main"
 APW_VERSION_URL  = APW_GITHUB_RAW + "/version.json"
 APW_PLUGIN_URL   = APW_GITHUB_RAW + "/chatt_wolf.py"
 APW_UPDATE_CHECK = True
-# ──────────────────────────────────────────────────────────────────────────────
 
 def _apw_get_plugin_path() -> str:
     return os.path.join(_babase.env()["python_directory_user"], "alpha_party_window.py")
@@ -68,10 +67,10 @@ def _apw_download_update(reason: str = "update") -> bool:
             pass
         with open(dest, "wb") as f:
             f.write(data)
-        print(f"[APW] ✅ {reason.capitalize()} successful. Restart BombSquad to apply.")
+        print(f"[APW] OK {reason.capitalize()} successful. Restart BombSquad to apply.")
         return True
     except Exception as e:
-        print(f"[APW] ❌ Download failed ({reason}):", e)
+        print(f"[APW] FAIL Download failed ({reason}):", e)
         return False
 
 def _apw_restore_backup():
@@ -81,10 +80,10 @@ def _apw_restore_backup():
         try:
             import shutil as _shutil
             _shutil.copy2(backup, dest)
-            print("[APW] 🔄 Restored backup file.")
+            print("[APW] Restored backup file.")
             return True
         except Exception as e:
-            print("[APW] ❌ Backup restore failed:", e)
+            print("[APW] Backup restore failed:", e)
     return False
 
 def _apw_check_and_update():
@@ -105,7 +104,7 @@ def _apw_check_and_update():
             build = 0
 
         if _apw_version_tuple(remote_version) > _apw_version_tuple(version_str):
-            print(f"[APW] 🔔 New version available: {remote_version} (current: {version_str})")
+            print(f"[APW] New version available: {remote_version} (current: {version_str})")
             ok = _apw_download_update("auto-update")
             if ok:
                 def _notify():
@@ -120,9 +119,9 @@ def _apw_check_and_update():
                 except Exception:
                     pass
         else:
-            print(f"[APW] ✔ Already on latest version ({version_str}).")
+            print(f"[APW] Already on latest version ({version_str}).")
     except Exception as e:
-        print("[APW] ⚠ Update check failed:", e)
+        print("[APW] Update check failed:", e)
 
 cache_chat = []
 draft_chat_text = ''
@@ -483,6 +482,42 @@ class AlphaPopupMenu:
         bui.containerwidget(edit=cnt, on_outside_click_call=babase.CallPartial(
             bui.containerwidget, edit=cnt, transition='out_scale'))
 
+def _get_bcs_pbid_sync(name: str):
+    """جلب PB-ID من Ballistica"""
+    try:
+        import base64 as _b64
+        encoded = _b64.b64encode(name.encode("utf-8")).decode("utf-8")
+        url = f'https://{BALLISTICA_SERVER}/player?key={encoded}&base64=true'
+        try:
+            build = _babase.env().get("build_number", 0)
+        except Exception:
+            build = 0
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": f'BS{str(build)}',
+                "Accept-Language": "en-US,en;q=0.9"
+            })
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = response.read()
+            arr = json.loads(data.decode('utf-8'))
+            if arr and isinstance(arr, list):
+                return arr[0].get('pbid')
+    except Exception as e:
+        print(f"[ChatWolf] PB fetch error for {name}: {e}")
+    return None
+
+
+def _fetch_pbid_async(name: str, callback):
+    """جلب PB-ID في thread منفصل"""
+    def _worker():
+        pbid = _get_bcs_pbid_sync(name)
+        try:
+            _babase.pushcall(lambda: callback(pbid), from_other_thread=True)
+        except Exception:
+            pass
+    start_new_thread(_worker, ())
+
 class AlphaPartyWindow(bui.Window):
     def __init__(self, *, origin: Sequence[float] = (0, 0)):
         self._uiopenstate = bui.UIOpenState('classicparty')
@@ -494,7 +529,6 @@ class AlphaPartyWindow(bui.Window):
         self._width = 500
         self._popup_party_member_player_id: Optional[int] = None
 
-        # متغيرات سجل الأسهم
         self._chat_hist_active = False
         self._chat_hist_index = -1
         self._chat_hist_original = ''
@@ -580,7 +614,6 @@ class AlphaPartyWindow(bui.Window):
             icon=bui.gettexture('menuButton'),
             iconscale=1.2)
 
-        # زر sorry الجديد في العمود الأيمن
         self._sorry_button = bui.buttonwidget(
             parent=self._root_widget,
             scale=0.7,
@@ -1186,20 +1219,19 @@ class AlphaPartyWindow(bui.Window):
 
     def _on_ip_button_press(self) -> None:
         bui.getsound('click01').play()
-        bs.chatmessage("joined IP" + ip_add + " PORT " + str(p_port))
+        bs.chatmessage("joined IP " + ip_add + " PORT " + str(p_port))
 
     def _on_ping_button_press(self) -> None:
         if current_ping == 0:
             bs.chatmessage("ping = 0 ms")
         else:
-            bs.chatmessage(f"ping = : {current_ping} ms")
+            bs.chatmessage(f"ping = {current_ping} ms")
 
     def _on_sorry_button_press(self) -> None:
-        """إرسال رسالة اعتذار جاهزة."""
         bs.chatmessage("سوري يحبوب🙂")
 
     def _on_id_button_press(self) -> None:
-        """عرض اللاعبين اللي عندهم UUID فقط مع الـ PPID."""
+        """عرض اللاعبين مع PB-ID و Account Name"""
         try:
             roster = bs.get_game_roster()
             activity = bs.get_foreground_host_activity()
@@ -1221,12 +1253,10 @@ class AlphaPartyWindow(bui.Window):
                 bui.screenmessage("لا يوجد لاعبون حالياً", color=(1, 0.5, 0.2))
                 return
 
-            choices = []
-            choices_display = []
+            collected = []
             seen = set()
 
             def _clean_uuid(s):
-                """تنظيف النص من الرموز الخاصة وإرجاع UUID لو صالح."""
                 if not isinstance(s, str):
                     return None
                 result = ''
@@ -1238,6 +1268,15 @@ class AlphaPartyWindow(bui.Window):
                     return result
                 return None
 
+            def _clean_name(s):
+                if not isinstance(s, str):
+                    return ''
+                result = ''
+                for ch in s:
+                    if not ('\ue000' <= ch <= '\uf8ff'):
+                        result += ch
+                return result.strip().strip("'").strip('"')
+
             for entry in roster:
                 if not isinstance(entry, dict):
                     continue
@@ -1245,13 +1284,9 @@ class AlphaPartyWindow(bui.Window):
                 client_id = entry.get('client_id', '?')
                 display = entry.get('display_string', '') or ''
                 players = entry.get('players', []) or []
-
                 active_player = active_by_client.get(client_id)
 
-                # محاولة جلب UUID من كل المصادر المتاحة
                 uuid_val = None
-
-                # 1) من اللاعب النشط
                 if active_player:
                     try:
                         account_id = active_player.get_account_id()
@@ -1259,12 +1294,8 @@ class AlphaPartyWindow(bui.Window):
                             uuid_val = account_id
                     except Exception:
                         pass
-
-                # 2) من display_string
                 if not uuid_val:
                     uuid_val = _clean_uuid(display)
-
-                # 3) من players[].id لو شكله UUID (نادر)
                 if not uuid_val and players:
                     for pl in players:
                         candidate = pl.get('id')
@@ -1274,9 +1305,8 @@ class AlphaPartyWindow(bui.Window):
                                 uuid_val = cleaned
                                 break
 
-                # لو مفيش UUID → نتجاهل اللاعب تماماً
                 if not uuid_val:
-                    continue
+                    uuid_val = ""
 
                 if active_player:
                     try:
@@ -1290,33 +1320,35 @@ class AlphaPartyWindow(bui.Window):
                     state = "IN GAME"
 
                     if p_id is not None:
-                        label = (
-                            f"| {client_id} | {uuid_val} | {p_id} | "
-                            f"{pname} | {state} |"
-                        )
                         key = f"{client_id}_{uuid_val}_{p_id}_{pname}"
                         if key not in seen:
                             seen.add(key)
-                            choices.append(label)
-                            choices_display.append(label)
-
+                            collected.append({
+                                'client_id': client_id,
+                                'uuid': uuid_val,
+                                'ppid': p_id,
+                                'name': pname,
+                                'state': state,
+                                'account': display,
+                            })
                 elif players:
                     for pl in players:
                         pl_name = pl.get('name_full', pl.get('name', '?'))
                         pl_id = pl.get('id', None)
                         if pl_id is None:
                             continue
-                        label = (
-                            f"| {client_id} | {uuid_val} | {pl_id} | "
-                            f"{pl_name} | IN LOBBY |"
-                        )
                         key = f"{client_id}_{uuid_val}_{pl_id}_{pl_name}"
                         if key not in seen:
                             seen.add(key)
-                            choices.append(label)
-                            choices_display.append(label)
+                            collected.append({
+                                'client_id': client_id,
+                                'uuid': uuid_val,
+                                'ppid': pl_id,
+                                'name': pl_name,
+                                'state': "IN LOBBY",
+                                'account': display,
+                            })
 
-            # إضافة اللاعبين النشطين اللي مش في الرoster
             for p in active_players:
                 try:
                     cid = p.get_client_id()
@@ -1326,45 +1358,79 @@ class AlphaPartyWindow(bui.Window):
                     continue
                 if cid in [e.get('client_id') for e in roster if isinstance(e, dict)]:
                     continue
-
                 try:
                     account_id = p.get_account_id()
                 except Exception:
                     account_id = None
-
                 if not account_id:
                     continue
-
                 try:
                     pname = p.getname()
                     p_id = p.get_id()
                 except Exception:
                     continue
-
-                label = f"| {cid} | {account_id} | {p_id} | {pname} | IN GAME |"
                 key = f"{cid}_{account_id}_{p_id}_{pname}"
                 if key in seen:
                     continue
                 seen.add(key)
-                choices.append(label)
-                choices_display.append(label)
+                collected.append({
+                    'client_id': cid,
+                    'uuid': account_id,
+                    'ppid': p_id,
+                    'name': pname,
+                    'state': "IN GAME",
+                    'account': pname,
+                })
 
-            if not choices:
+            if not collected:
                 bui.getsound('error').play()
-                bui.screenmessage(
-                    "فشل جلب ال uuid",
-                    color=(1, 0.5, 0.2))
+                bui.screenmessage("فشل جلب ال uuid", color=(1, 0.5, 0.2))
                 return
 
-            AlphaPopupMenu(
-                position=self._id_button.get_screen_space_center(),
-                scale=_get_popup_window_scale(),
-                choices=choices,
-                choices_display=choices_display,
-                current_choice=choices[0],
-                delegate=self
-            )
-            self._popup_type = "id_select"
+            bui.screenmessage(
+                f"Fetching PB-IDs for {len(collected)} player(s)...",
+                color=(0.5, 0.8, 1))
+
+            results = {'done': 0, 'total': len(collected), 'items': []}
+
+            def _on_each_done(idx, pbid):
+                results['done'] += 1
+                item = collected[idx].copy()
+                item['pbid'] = pbid if pbid else 'N/A'
+                results['items'].append((idx, item))
+
+                if results['done'] >= results['total']:
+                    results['items'].sort(key=lambda x: x[0])
+                    final_items = [i[1] for i in results['items']]
+
+                    choices = []
+                    for it in final_items:
+                        label = (
+                            f"| {it['client_id']} | "
+                            f"{it['pbid']} | "
+                            f"{it['account']} | {it['state']} |"
+                        )
+                        choices.append(label)
+
+                    if not choices:
+                        bui.screenmessage("No valid players found.", color=(1, 0.5, 0.2))
+                        return
+
+                    AlphaPopupMenu(
+                        position=self._id_button.get_screen_space_center(),
+                        scale=_get_popup_window_scale(),
+                        choices=choices,
+                        choices_display=choices,
+                        current_choice=choices[0],
+                        delegate=self
+                    )
+                    self._popup_type = "id_select"
+
+            for idx, item in enumerate(collected):
+                clean_name = _clean_name(item['account']) or _clean_name(item['name'])
+                _fetch_pbid_async(
+                    clean_name,
+                    lambda pbid, i=idx: _on_each_done(i, pbid))
 
         except Exception as e:
             bui.getsound('error').play()
@@ -1659,7 +1725,7 @@ class AlphaPartyWindow(bui.Window):
             position=(c_width * 0.5, c_height - 28),
             size=(0, 0),
             h_align='center', v_align='center',
-            text='⭐  Saved Servers',
+            text='Saved Servers',
             color=(1, 0.85, 0.2),
             scale=0.95,
             maxwidth=c_width * 0.85)
@@ -1958,7 +2024,7 @@ class AlphaPartyWindow(bui.Window):
             parent=cnt,
             position=(c_width * 0.5, c_height - 28),
             size=(0, 0), h_align='center', v_align='center',
-            text='𝗖𝗛𝗔𝗧 𝗪𝗢𝗟𝗙',
+            text='CHATT WOLF',
             color=(1, 0.85, 0.2), scale=0.95,
             maxwidth=c_width * 0.85)
 
@@ -1966,7 +2032,7 @@ class AlphaPartyWindow(bui.Window):
             parent=cnt,
             position=(c_width * 0.5, c_height - 60),
             size=(0, 0), h_align='center', v_align='center',
-            text='Version CHAT 1.7',
+            text='Version 1.7',
             color=(0.3, 1, 0.3), scale=0.62,
             maxwidth=c_width * 0.85)
 
@@ -1974,7 +2040,7 @@ class AlphaPartyWindow(bui.Window):
             parent=cnt,
             position=(c_width * 0.5, c_height - 90),
             size=(0, 0), h_align='center', v_align='center',
-            text='𝗕𝗬 𝗡𝗢𝗩𝗢',
+            text='BY NOVO',
             color=(0.7, 0.9, 1.0), scale=0.62,
             maxwidth=c_width * 0.85)
 
@@ -2578,7 +2644,6 @@ class AlphaPartyWindow(bui.Window):
                         babase.Lstr(resource="getTicketsWindow.unavailableText"), color=(1, 0, 0))
 
         elif self._popup_type == "id_select":
-            # إرسال المواصفات الكاملة إلى الشات
             try:
                 bs.chatmessage(choice)
             except Exception:
