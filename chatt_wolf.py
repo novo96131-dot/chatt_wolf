@@ -51,7 +51,6 @@ def _apw_version_tuple(v: str):
     import re as _re
     nums = _re.findall(r'\d+', v)
     return tuple(int(x) for x in nums)
-
 def _apw_download_update(reason: str = "update") -> bool:
     try:
         req = urllib.request.Request(
@@ -60,32 +59,68 @@ def _apw_download_update(reason: str = "update") -> bool:
         data = urllib.request.urlopen(req, timeout=20).read()
         dest = _apw_get_plugin_path()
         backup = dest + ".bak"
+
+        # 1. backup
         try:
             if os.path.exists(dest):
                 import shutil as _shutil
                 _shutil.copy2(dest, backup)
-        except Exception:
-            pass
-        with open(dest, "wb") as f:
-            f.write(data)
-        print(f"[APW] OK {reason.capitalize()} successful. Restart BombSquad to apply.")
+                print(f"[APW] Backup created: {backup}")
+        except Exception as e:
+            print(f"[APW] Backup failed: {e}")
+
+        # 2. امسح القديم
+        try:
+            if os.path.exists(dest):
+                os.remove(dest)
+                print(f"[APW] Removed old file: {dest}")
+        except Exception as e:
+            print(f"[APW] Remove failed: {e}")
+
+        # 3. اكتب الجديد
+        try:
+            with open(dest, "wb") as f:
+                f.write(data)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[APW] Write failed: {e}")
+            try:
+                fallback = os.path.join(_babase.env()["python_directory_user"], "chatt_wolf.py")
+                with open(fallback, "wb") as f:
+                    f.write(data)
+                print(f"[APW] Written to fallback: {fallback}")
+                return True
+            except Exception as e2:
+                print(f"[APW] Fallback write failed: {e2}")
+                return False
+
+        # 4. تحقق من الكتابة
+        try:
+            if os.path.exists(dest):
+                size = os.path.getsize(dest)
+                print(f"[APW] File written: {dest} ({size} bytes)")
+                if size < 100:
+                    print(f"[APW] File too small! Writing to fallback.")
+                    fallback = os.path.join(_babase.env()["python_directory_user"], "chatt_wolf.py")
+                    with open(fallback, "wb") as f:
+                        f.write(data)
+                    return True
+            else:
+                print(f"[APW] File doesn't exist after write!")
+                return False
+        except Exception as e:
+            print(f"[APW] Verification failed: {e}")
+            return False
+
+        print(f"[APW] OK {reason.capitalize()} successful.")
         return True
     except Exception as e:
         print(f"[APW] FAIL Download failed ({reason}):", e)
         return False
-
-def _apw_restore_backup():
-    dest   = _apw_get_plugin_path()
-    backup = dest + ".bak"
-    if os.path.exists(backup):
-        try:
-            import shutil as _shutil
-            _shutil.copy2(backup, dest)
-            print("[APW] Restored backup file.")
-            return True
-        except Exception as e:
-            print("[APW] Backup restore failed:", e)
-    return False
 
 def _apw_check_and_update():
     if not APW_UPDATE_CHECK:
