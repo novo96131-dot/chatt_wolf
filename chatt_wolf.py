@@ -43,8 +43,9 @@ APW_VERSION_URL  = APW_GITHUB_RAW + "/version.json"
 APW_PLUGIN_URL   = APW_GITHUB_RAW + "/chatt_wolf.py"
 APW_UPDATE_CHECK = True
 
+
 def _apw_get_plugin_path() -> str:
-    return os.path.join(_babase.env()["python_directory_user"], "alpha_party_window.py")
+    return os.path.join(_babase.env()["python_directory_user"], "chatt_wolf.py")
 
 def _apw_version_tuple(v: str):
     import re as _re
