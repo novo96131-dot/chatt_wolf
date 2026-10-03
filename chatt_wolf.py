@@ -35,7 +35,7 @@ import urllib.parse
 from _thread import start_new_thread
 import threading
 
-version_str = "1.9"
+version_str = "1.10"
 BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
 
 APW_GITHUB_RAW   = "https://raw.githubusercontent.com/novo96131-dot/chatt_wolf/main"
@@ -2036,7 +2036,7 @@ class AlphaPartyWindow(bui.Window):
             parent=cnt,
             position=(c_width * 0.5, c_height - 60),
             size=(0, 0), h_align='center', v_align='center',
-            text='Version 1.9',
+            text='Version 1.10',
             color=(0.3, 1, 0.3), scale=0.62,
             maxwidth=c_width * 0.85)
 
