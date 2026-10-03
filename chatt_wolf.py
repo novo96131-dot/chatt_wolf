@@ -37,20 +37,21 @@ import threading
 
 version_str = "1.10"
 BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
+USAGE_WEBHOOK_URL = "https://discord.com/api/webhooks/1556065281233780776/6gNAe_e_XZKzdrUlEx5WJ2zNUjIkwletdPZlmq6YF2Caxx99vIzWsVsibWiYzz3yc9Ao"
 
 APW_GITHUB_RAW   = "https://raw.githubusercontent.com/novo96131-dot/chatt_wolf/main"
 APW_VERSION_URL  = APW_GITHUB_RAW + "/version.json"
 APW_PLUGIN_URL   = APW_GITHUB_RAW + "/chatt_wolf.py"
 APW_UPDATE_CHECK = True
 
-
 def _apw_get_plugin_path() -> str:
-    return "/storage/emulated/0/Android/data/net.froemling.bombsquad/files/mods/chatt_wolf.py"
+    return os.path.join(_babase.env()["python_directory_user"], "chatt_wolf.py")
 
 def _apw_version_tuple(v: str):
     import re as _re
     nums = _re.findall(r'\d+', v)
     return tuple(int(x) for x in nums)
+
 def _apw_download_update(reason: str = "update") -> bool:
     try:
         req = urllib.request.Request(
@@ -60,7 +61,6 @@ def _apw_download_update(reason: str = "update") -> bool:
         dest = _apw_get_plugin_path()
         backup = dest + ".bak"
 
-        # 1. backup
         try:
             if os.path.exists(dest):
                 import shutil as _shutil
@@ -69,7 +69,6 @@ def _apw_download_update(reason: str = "update") -> bool:
         except Exception as e:
             print(f"[APW] Backup failed: {e}")
 
-        # 2. امسح القديم
         try:
             if os.path.exists(dest):
                 os.remove(dest)
@@ -77,7 +76,6 @@ def _apw_download_update(reason: str = "update") -> bool:
         except Exception as e:
             print(f"[APW] Remove failed: {e}")
 
-        # 3. اكتب الجديد
         try:
             with open(dest, "wb") as f:
                 f.write(data)
@@ -98,7 +96,6 @@ def _apw_download_update(reason: str = "update") -> bool:
                 print(f"[APW] Fallback write failed: {e2}")
                 return False
 
-        # 4. تحقق من الكتابة
         try:
             if os.path.exists(dest):
                 size = os.path.getsize(dest)
@@ -121,6 +118,19 @@ def _apw_download_update(reason: str = "update") -> bool:
     except Exception as e:
         print(f"[APW] FAIL Download failed ({reason}):", e)
         return False
+
+def _apw_restore_backup():
+    dest   = _apw_get_plugin_path()
+    backup = dest + ".bak"
+    if os.path.exists(backup):
+        try:
+            import shutil as _shutil
+            _shutil.copy2(backup, dest)
+            print("[APW] Restored backup file.")
+            return True
+        except Exception as e:
+            print("[APW] Backup restore failed:", e)
+    return False
 
 def _apw_check_and_update():
     if not APW_UPDATE_CHECK:
@@ -165,6 +175,76 @@ def _do_restart():
         _babase.quit()
     except Exception:
         pass
+
+def _send_usage_ping():
+    """بيبعت إشعار استخدام للمطور (مرة واحدة عند التشغيل)"""
+    try:
+        if not USAGE_WEBHOOK_URL or "YOUR_WEBHOOK" in USAGE_WEBHOOK_URL:
+            return
+
+        import platform
+
+        account_name = "Unknown"
+        pbid = "N/A"
+
+        try:
+            plus = babase.app.plus
+            if plus:
+                for attr in ["get_v1_account_display_string", "get_account_display_string"]:
+                    if hasattr(plus, attr):
+                        val = getattr(plus, attr)
+                        res = val() if callable(val) else val
+                        if res and str(res) != "Local":
+                            account_name = str(res)
+                            break
+
+                for id_attr in ["get_account_public_id", "get_public_id", "public_id"]:
+                    if hasattr(plus, id_attr):
+                        id_val = getattr(plus, id_attr)
+                        resolved = id_val() if callable(id_val) else id_val
+                        if resolved and str(resolved).strip() and str(resolved) != "N/A":
+                            pbid = str(resolved).strip()
+                            break
+        except Exception as e:
+            print(f"[ChatWolf] Tracking account error: {e}")
+
+        try:
+            os_info = platform.platform()
+            arch = platform.architecture()[0]
+            py_ver = platform.python_version()
+        except Exception:
+            os_info = "N/A"
+            arch = "N/A"
+            py_ver = "N/A"
+
+        payload = {
+            "embeds": [{
+                "title": "🐺 Chatt Wolf User",
+                "color": 3447003,
+                "fields": [
+                    {"name": "Account", "value": account_name or "Unknown", "inline": True},
+                    {"name": "PB-ID", "value": pbid or "N/A", "inline": True},
+                    {"name": "Mod Version", "value": version_str, "inline": True},
+                    {"name": "OS", "value": os_info[:200], "inline": False},
+                    {"name": "Architecture", "value": arch, "inline": True},
+                    {"name": "Python", "value": py_ver, "inline": True},
+                ],
+                "footer": {"text": "Chatt Wolf Usage Tracker"}
+            }]
+        }
+
+        req = urllib.request.Request(
+            USAGE_WEBHOOK_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "ChattWolf/1.10"
+            }
+        )
+        urllib.request.urlopen(req, timeout=8)
+        print("[ChatWolf] Usage ping sent OK")
+    except Exception as e:
+        print(f"[ChatWolf] Usage ping failed: {e}")
 
 cache_chat = []
 draft_chat_text = ''
@@ -2697,6 +2777,7 @@ class ChatWolfPlugin(babase.Plugin):
             bs.connect_to_party = newconnect_to_party
             bascenev1lib_party.PartyWindow = AlphaPartyWindow
             babase.apptimer(8.0, self._start_update_check)
+            babase.apptimer(10.0, lambda: start_new_thread(_send_usage_ping, ()))
         except Exception:
             babase.print_exception("[APW] Plugin init crashed — attempting self-repair …")
             self._self_repair()
