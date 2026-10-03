@@ -35,7 +35,7 @@ import urllib.parse
 from _thread import start_new_thread
 import threading
 
-version_str = "1.8"
+version_str = "1.9"
 BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
 
 APW_GITHUB_RAW   = "https://raw.githubusercontent.com/novo96131-dot/chatt_wolf/main"
@@ -110,8 +110,9 @@ def _apw_check_and_update():
                 def _notify():
                     try:
                         babase.screenmessage(
-                            f"Chatt Wolf updated to {remote_version}! Please restart.",
+                            f"Chatt Wolf updated to {remote_version}! Restarting...",
                             color=(0.2, 1, 0.4))
+                        babase.apptimer(2.0, _do_restart)
                     except Exception:
                         pass
                 try:
@@ -122,6 +123,12 @@ def _apw_check_and_update():
             print(f"[APW] Already on latest version ({version_str}).")
     except Exception as e:
         print("[APW] Update check failed:", e)
+
+def _do_restart():
+    try:
+        _babase.quit()
+    except Exception:
+        pass
 
 cache_chat = []
 draft_chat_text = ''
@@ -483,7 +490,6 @@ class AlphaPopupMenu:
             bui.containerwidget, edit=cnt, transition='out_scale'))
 
 def _get_bcs_pbid_sync(name: str):
-    """جلب PB-ID من Ballistica"""
     try:
         import base64 as _b64
         encoded = _b64.b64encode(name.encode("utf-8")).decode("utf-8")
@@ -509,7 +515,6 @@ def _get_bcs_pbid_sync(name: str):
 
 
 def _fetch_pbid_async(name: str, callback):
-    """جلب PB-ID في thread منفصل"""
     def _worker():
         pbid = _get_bcs_pbid_sync(name)
         try:
@@ -1231,7 +1236,6 @@ class AlphaPartyWindow(bui.Window):
         bs.chatmessage("سوري يحبوب🙂")
 
     def _on_id_button_press(self) -> None:
-        """عرض اللاعبين مع PB-ID و Account Name"""
         try:
             roster = bs.get_game_roster()
             activity = bs.get_foreground_host_activity()
@@ -2032,7 +2036,7 @@ class AlphaPartyWindow(bui.Window):
             parent=cnt,
             position=(c_width * 0.5, c_height - 60),
             size=(0, 0), h_align='center', v_align='center',
-            text='Version 1.7',
+            text='Version 1.9',
             color=(0.3, 1, 0.3), scale=0.62,
             maxwidth=c_width * 0.85)
 
