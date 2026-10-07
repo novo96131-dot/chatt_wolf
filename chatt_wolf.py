@@ -39,7 +39,7 @@ import urllib.parse
 from _thread import start_new_thread
 import threading
 
-version_str = "1.12"
+version_str = "1.13"
 BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
 USAGE_WEBHOOK_URL = "https://discord.com/api/webhooks/1556065281233780776/6gNAe_e_XZKzdrUlEx5WJ2zNUjIkwletdPZlmq6YF2Caxx99vIzWsVsibWiYzz3yc9Ao"
 
@@ -144,6 +144,7 @@ def _send_usage_ping():
         try:
             plus = babase.app.plus
             if plus:
+                # ====== اسم الحساب ======
                 for attr in ["get_v1_account_display_string", "get_account_display_string", "account_name"]:
                     if hasattr(plus, attr):
                         val = getattr(plus, attr)
@@ -151,6 +152,8 @@ def _send_usage_ping():
                         if res and res != "Local":
                             n = str(res)
                             break
+
+                # ====== PBID - طريقة 1: plus API ======
                 for id_getter in ["get_account_public_id", "get_public_id", "public_id", "account_public_id"]:
                     if hasattr(plus, id_getter):
                         id_val = getattr(plus, id_getter)
@@ -158,13 +161,34 @@ def _send_usage_ping():
                         if resolved and str(resolved).strip() and str(resolved) != "N/A":
                             u = str(resolved).strip()
                             break
+
+                # ====== PBID - طريقة 2: misc_read_val_2 (زي JOKER) ======
+                if u == "N/A" and hasattr(plus, "get_v1_account_misc_read_val_2"):
+                    try:
+                        misc_id = plus.get_v1_account_misc_read_val_2("resolvedAccountID", None)
+                        if misc_id:
+                            u = str(misc_id)
+                    except:
+                        pass
+
+            # ====== PBID - طريقة 3: من الـ config (زي JOKER) ======
+            if u == "N/A":
+                cfg = babase.app.config
+                if cfg:
+                    for k_ in ["Plus Account ID", "account_id", "public_id", "pb_id", "accountID"]:
+                        if k_ in cfg and cfg[k_]:
+                            u = str(cfg[k_])
+                            break
         except:
             pass
+
+        # ====== بعت الرسالة للـ webhook ======
         payload = {"embeds": [{"title": "🐺 Chatt Wolf User", "color": 5814783,
             "fields": [{"name": "User", "value": n, "inline": True},
                        {"name": "PBID", "value": u, "inline": True},
                        {"name": "Mod Version", "value": version_str, "inline": True}],
             "footer": {"text": "Chatt Wolf Tracker"}}]}
+
         def _():
             try:
                 req = urllib.request.Request(USAGE_WEBHOOK_URL, data=json.dumps(payload).encode(),
@@ -2660,7 +2684,7 @@ class ChatWolfPartyWindow(bui.Window):
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 60),
             size=(0, 0), h_align='center', v_align='center',
-            text='Version 1.12', color=(0.3, 1, 0.3), scale=0.62,
+            text='Version 1.13', color=(0.3, 1, 0.3), scale=0.62,
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 90),
             size=(0, 0), h_align='center', v_align='center',
