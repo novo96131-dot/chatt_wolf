@@ -3,7 +3,7 @@
 '''
 Chatt Wolf
 by NOVO
-With Player Database System + Rejoin Button + Saved Servers Button
+With Player Database System + Rejoin Button + Saved Servers Button + Features Window (AR/EN)
 (بدون زر Friend)
 '''
 
@@ -39,7 +39,7 @@ import urllib.parse
 from _thread import start_new_thread
 import threading
 
-version_str = "1.11"
+version_str = "1.12"
 BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
 USAGE_WEBHOOK_URL = "https://discord.com/api/webhooks/1556065281233780776/6gNAe_e_XZKzdrUlEx5WJ2zNUjIkwletdPZlmq6YF2Caxx99vIzWsVsibWiYzz3yc9Ao"
 
@@ -1393,8 +1393,6 @@ def _open_player_database_window(parent_window=None) -> None:
     
     bui.textwidget(edit=search_field, on_return_press_call=_do_search)
     bui.containerwidget(edit=cnt, cancel_button=back_btn)
-
-
 # ============================================================
 # ========== PARTY WINDOW ==========
 # ============================================================
@@ -1434,6 +1432,10 @@ class ChatWolfPartyWindow(bui.Window):
         _r, _g, _b = self._bg_color
         _btn_col  = (_r * 0.8, _g * 0.8, _b * 0.8)
         _btn_col2 = (_r * 0.9, _g * 0.9, _b * 0.9)
+        # ✅ نخليهم متاحين بره __init__ (عشان نافذة المميزات)
+        self._btn_col  = _btn_col
+        self._btn_col2 = _btn_col2
+
         self._cancel_button = bui.buttonwidget(parent=self._root_widget,
             scale=0.7, position=(30, self._height - 47), size=(50, 50),
             label='', on_activate_call=self.close, autoselect=True,
@@ -1458,12 +1460,22 @@ class ChatWolfPartyWindow(bui.Window):
             color=_btn_col2, icon=bui.gettexture('menuButton'), iconscale=1.2)
         self._sorry_button = bui.buttonwidget(
             parent=self._root_widget, scale=0.7, size=(50, 50),
-            color=_btn_col2, position=(self._width - 15, self._height - 47 - 50),
+            color=_btn_col2, position=(self._width - 15, self._height - 47 - 70),
             label='sorry', text_scale=0.55, textcolor=(0.3, 1, 0.3),
             button_type='square',
             on_activate_call=babase.WeakCallStrict(self._on_sorry_button_press),
             autoselect=True)
-        # ❌ زر Friend اتشال
+
+        # 📋 زر "مميزات" (مكان زر Friend اللي اتشال)
+        self._features_button = bui.buttonwidget(
+            parent=self._root_widget, scale=0.7, size=(50, 50),
+            color=_btn_col2,
+            position=(self._width - 15, self._height - 47 - 120),
+            label='📖', text_scale=1.5, textcolor=(1, 1, 1),
+            button_type='square',
+            on_activate_call=babase.WeakCallStrict(self._on_features_button_press),
+            autoselect=True)
+
         info = bs.get_connection_to_host_info_2()
         if info != None:
             if isinstance(info, dict):
@@ -1534,6 +1546,16 @@ class ChatWolfPartyWindow(bui.Window):
             text_scale=1.0,
             position=(self._width - 15, 115),
             on_activate_call=self._open_saved_servers_window)
+        # 🎨 زر الألوان (تحت زر S)
+        self._color_button = bui.buttonwidget(
+            parent=self._root_widget,
+            size=(30, 30), label='🎨',
+            button_type='square', autoselect=True,
+            color=_btn_col,
+            textcolor=(1, 1, 1),
+            text_scale=0.9,
+            position=(self._width - 15, 155),
+            on_activate_call=babase.WeakCallStrict(self._on_color_button_press))
         # ✅ زر Rejoin
         self._rejoin_button = bui.buttonwidget(
            parent=self._root_widget,
@@ -1648,6 +1670,159 @@ class ChatWolfPartyWindow(bui.Window):
             bui.screenmessage(f'Rejoin failed: {str(e)}', color=(1, 0.3, 0.3))
             bui.getsound('error').play()
 
+    # ============================================================
+    # ========== FEATURES WINDOW (عربي + English) ==========
+    # ============================================================
+
+    def _on_features_button_press(self) -> None:
+        """افتح نافذة المميزات بالعربي"""
+        try:
+            bui.getsound('click01').play()
+            self._show_features_popup(lang='ar')
+        except Exception as e:
+            print(f"[ChatWolf] Features button error: {e}")
+
+    def _show_features_popup(self, lang: str = 'ar') -> None:
+        """نافذة مميزات الشات (عربي/إنجليزي) — بألوان نافذة الحفلة"""
+        uiscale = bui.app.ui_v1.uiscale
+
+        # ===== المميزات بالعربي =====
+        if lang == 'ar':
+            title_text  = '📋 مميزات الشات'
+            back_text   = 'رجوع'
+            switch_text = 'English'
+            features = [
+                ("💬", "إرسال رسالة",       "اكتب رسالتك في الخانة واضغط Send"),
+                ("🔍", "البحث عن لاعب",     "من القائمة الرئيسية  📦 Player Database"),
+                ("🆔", "عرض ID",         "اضغط زر ID لعرض معرّف كل لاعب"),
+                ("⚡", "إعادة الدخول",      "اضغط زر ↻ للخروج والدخول للسيرفر"),
+                ("💾", "السيرفرات المحفوظة","اضغط زر S لحفظ السيرفرات"),
+                ("📋", "نسخ رسالة",         "اضغط على أي رسالة في الدردشة Copy"),
+                ("↩️", "رد على رسالة",      "اضغط على رسالة → Reply"),
+                ("⬆️⬇️", "سجل الدردشة",     "استخدم الأسهم للتنقل بين الرسائل"),
+                ("🐺", "الترحيب التلقائي",  "لما صديق يدخل السيرفر"),
+                ("🎨", "تغيير الألوان",     "من زر 🎨"),
+                ("🔇", "كتم الدردشة",       "من قائمة  Mute all"),
+                ("🚫", "كتم لاعب معيّن",    "اضغط على اسم اللاعب → Mute Chat"),
+                ("👤", "معلومات لاعب",      "اضغط على اسم اللاعب → Player Info"),
+                ("📦", "قاعدة البيانات",    "من قائمة ... → 📦 Player Database"),
+                ("💬", "الردود السريعة",    "اضغط زر Quick للردود السريعة"),
+                ("🧾", "نسخ اسم اللاعب",    "اضغط علي اسم اللاعب ثم mountain"),
+                ("📝", "ChatWolF",    "BY NOVO"),
+            ]
+        # ===== Features in English =====
+        else:
+            title_text  = '📋 Chat Features'
+            back_text   = 'Back'
+            switch_text = 'عربي'
+            features = [
+                ("💬", "Send Message",     "Type your message and press Send"),
+                ("🔍", "Search Player",    "From main menu → 📦 Player Database"),
+                ("🆔", "Show ID",       "Press ID button to show player ID"),
+                ("⚡", "Rejoin Server",    "Press ↻ button to leave and rejoin"),
+                ("💾", "Saved Servers",    "Press S button to save servers"),
+                ("📋", "Copy Message",     "Click on any chat message → Copy"),
+                ("↩️", "Reply Message",    "Click on a message → Reply"),
+                ("⬆️⬇️", "Chat History",    "Use arrows to navigate messages"),
+                ("🐺", "Auto Welcome",     "When a friend joins the server"),
+                ("🎨", "Change Colors",    "From 🎨"),
+                ("🔇", "Mute Chat",        "From menu Mute all"),
+                ("🚫", "Mute Player",      "Click on player name → Mute Chat"),
+                ("👤", "Player Info",      "Click on player name → Player Info"),
+                ("📦", "Player Database",  "From menu ... → 📦 Player Database"),
+                ("💬", "Quick Replies",    "Press Quick button for quick replies"),
+                ("🧾", "Player copy",    "Click on player name mountain"),
+                ("📝", "ChatWolF",    "BY NOVO"),
+            ]
+
+        c_width   = 500
+        row_h     = 60
+        header_h  = 60
+        footer_h  = 70
+        max_visible = 6
+        list_h = min(len(features) * row_h, max_visible * row_h)
+        c_height = header_h + list_h + footer_h
+
+        # ✅ نفس ألوان نافذة الحفلة
+        _r, _g, _b = self._bg_color
+
+        cnt = bui.containerwidget(
+            scale=(1.6 if uiscale is babase.UIScale.SMALL else
+                   1.2 if uiscale is babase.UIScale.MEDIUM else 1.0),
+            size=(c_width, c_height), transition='in_scale',
+            color=self._bg_color,
+            parent=bui.get_special_widget('overlay_stack'))
+
+        # العنوان
+        bui.textwidget(parent=cnt,
+            position=(c_width * 0.5, c_height - 30),
+            size=(0, 0), h_align='center', v_align='center',
+            text=title_text,
+            color=(1, 0.85, 0.2), scale=1.1)
+
+        # القائمة
+        scroll = bui.scrollwidget(parent=cnt,
+            size=(c_width - 20, list_h),
+            position=(10, footer_h),
+            color=(_r * 0.7, _g * 0.7, _b * 0.7))
+        col = bui.columnwidget(parent=scroll, border=2, margin=0)
+
+        for icon, feat_title, desc in features:
+            row = bui.containerwidget(parent=col,
+                size=(c_width - 40, row_h - 8), background=False)
+
+            bui.textwidget(parent=row,
+                position=((c_width - 40) * 0.5, row_h - 20),
+                size=(0, 0), h_align='center', v_align='center',
+                text=f'{icon}  {feat_title}',
+                color=(0.4, 1, 0.6), scale=0.68,
+                maxwidth=c_width - 60)
+
+            bui.textwidget(parent=row,
+                position=((c_width - 40) * 0.5, row_h - 40),
+                size=(0, 0), h_align='center', v_align='center',
+                text=desc,
+                color=(0.85, 0.9, 1.0), scale=0.5,
+                maxwidth=c_width - 60)
+
+        # زر الرجوع (يمين)
+        def _close():
+            bui.getsound('swish').play()
+            bui.containerwidget(edit=cnt, transition='out_scale')
+
+        back_btn = bui.buttonwidget(parent=cnt,
+            size=(150, 40),
+            position=(c_width * 0.5 + 10, 15),
+            label=back_text,
+            color=self._btn_col,
+            text_scale=0.75,
+            textcolor=(1, 1, 1),
+            autoselect=True,
+            on_activate_call=_close)
+
+        # زر تبديل اللغة (شمال)
+        def _switch_lang():
+            bui.getsound('click01').play()
+            bui.containerwidget(edit=cnt, transition='out_scale')
+            new_lang = 'en' if lang == 'ar' else 'ar'
+            babase.apptimer(0.1, babase.CallStrict(self._show_features_popup, new_lang))
+
+        lang_btn = bui.buttonwidget(parent=cnt,
+            size=(150, 40),
+            position=(c_width * 0.5 - 160, 15),
+            label=switch_text,
+            color=self._btn_col2,
+            text_scale=0.75,
+            textcolor=(1, 1, 1),
+            autoselect=True,
+            on_activate_call=_switch_lang)
+
+        bui.containerwidget(edit=cnt, cancel_button=back_btn)
+
+    # ============================================================
+    # ========== END FEATURES WINDOW ==========
+    # ============================================================
+
     def title_selected(self):
         self.full_chat_mode = self.full_chat_mode == False
         self._update()
@@ -1725,6 +1900,9 @@ class ChatWolfPartyWindow(bui.Window):
         r, g, b = color
         btn_color  = (r * 0.8, g * 0.8, b * 0.8)
         btn_color2 = (r * 0.9, g * 0.9, b * 0.9)
+        # ✅ حدّث الألوان المتاحة في self عشان نافذة المميزات
+        self._btn_col  = btn_color
+        self._btn_col2 = btn_color2
         scroll_color = (r * 0.7, g * 0.7, b * 0.7)
         rejoin_color = (r * 0.8, g * 0.8, b * 0.8)
         saved_color = (r * 0.8, g * 0.8, b * 0.8)
@@ -1732,10 +1910,11 @@ class ChatWolfPartyWindow(bui.Window):
             (self._roster_toggle_button, btn_color), (self._ip_button, btn_color2),
             (self.ping_widget, btn_color2), (self._id_button, btn_color2),
             (self._menu_button, btn_color2), (self._sorry_button, btn_color2),
+            (self._features_button, btn_color2),
             (self._times_button, btn_color),
             (self._hist_up_button, btn_color), (self._hist_down_button, btn_color),
             (self._send_button, btn_color2), (self._rejoin_button, rejoin_color),
-            (self._saved_button, saved_color)]:
+            (self._saved_button, saved_color), (self._color_button, btn_color)]:
             try:
                 bui.buttonwidget(edit=widget, color=col)
             except Exception:
@@ -1805,14 +1984,13 @@ class ChatWolfPartyWindow(bui.Window):
         is_muted = babase.app.config.resolve('Chat Muted')
         global chatlogger
         choices = ["unmute" if is_muted else "mute", "screenmsg",
-                   "addQuickReply", "removeQuickReply", "chatlogger", "change_color",
+                   "addQuickReply", "removeQuickReply", "chatlogger",
                    "player_db", "credits"]
         DisChoices = [_getTransText("unmuteall", isBaLstr=True) if is_muted else _getTransText("muteall", isBaLstr=True),
                       _getTransText("screenmsgoff", isBaLstr=True) if screenmsg else _getTransText("screenmsgon", isBaLstr=True),
                       _getTransText("Add_a_Quick_Reply", isBaLstr=True),
                       _getTransText("Remove_a_Quick_Reply", isBaLstr=True),
                       _getTransText("chatloggeroff", isBaLstr=True) if chatlogger else _getTransText("chatloggeron", isBaLstr=True),
-                      _getTransText("change_color", isBaLstr=True),
                       babase.Lstr(resource="??Unknown??", fallback_value="📦 Player Database"),
                       _getTransText("Credits_for_This", isBaLstr=True)]
         if self._getCustomSets().get("Enable_HostInfo_Debug", False):
@@ -1893,12 +2071,18 @@ class ChatWolfPartyWindow(bui.Window):
     def _on_sorry_button_press(self) -> None:
         bs.chatmessage("سوري يحبوب🙂")
 
-    # ⚠️ الدالة _on_friends_button_press لسه موجودة بس مش بتستخدم (الزر اتشال)
-
-    def _open_friends_window(self) -> None:
-        """⚠️ النافذة لسه موجودة بس مش بتُستدعى (الزر اتشال)"""
-        # الكود كامل زي ما هو، بس مفيش زر بينده عليه
-        pass  # ← ممكن تمسحها بالكامل
+    def _on_color_button_press(self) -> None:
+        """افتح نافذة تغيير الألوان"""
+        try:
+            bui.getsound('click01').play()
+            ColorPickerExact(
+                parent=self.get_root_widget(),
+                position=self.get_root_widget().get_screen_space_center(),
+                initial_color=self._bg_color,
+                delegate=self,
+                tag='')
+        except Exception as e:
+            print(f"[ChatWolf] Color button error: {e}")
 
     def _on_id_button_press(self) -> None:
         try:
@@ -2476,7 +2660,7 @@ class ChatWolfPartyWindow(bui.Window):
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 60),
             size=(0, 0), h_align='center', v_align='center',
-            text='Version 1.11', color=(0.3, 1, 0.3), scale=0.62,
+            text='Version 1.12', color=(0.3, 1, 0.3), scale=0.62,
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 90),
             size=(0, 0), h_align='center', v_align='center',
