@@ -4,7 +4,7 @@
 Chatt Wolf
 by NOVO
 With Player Database System + Rejoin Button + Saved Servers Button + Features Window (AR/EN)
-(بدون زر Friend)
++ Theme Engine (added, inspired by BetterParty)
 '''
 
 import traceback
@@ -38,8 +38,10 @@ import urllib.request
 import urllib.parse
 from _thread import start_new_thread
 import threading
+import colorsys as _cs
+import math as _m
 
-version_str = "1.13"
+version_str = "1.16"
 BALLISTICA_SERVER = 'mods.ballistica.workers.dev'
 USAGE_WEBHOOK_URL = "https://discord.com/api/webhooks/1556065281233780776/6gNAe_e_XZKzdrUlEx5WJ2zNUjIkwletdPZlmq6YF2Caxx99vIzWsVsibWiYzz3yc9Ao"
 
@@ -48,13 +50,16 @@ APW_VERSION_URL  = APW_GITHUB_RAW + "/version.json"
 APW_PLUGIN_URL   = APW_GITHUB_RAW + "/chatt_wolf.py"
 APW_UPDATE_CHECK = True
 
+
 def _apw_get_plugin_path() -> str:
     return os.path.join(_babase.env()["python_directory_user"], "chatt_wolf.py")
+
 
 def _apw_version_tuple(v: str):
     import re as _re
     nums = _re.findall(r'\d+', v)
     return tuple(int(x) for x in nums)
+
 
 def _apw_download_update(reason: str = "update") -> bool:
     try:
@@ -90,6 +95,7 @@ def _apw_download_update(reason: str = "update") -> bool:
         print(f"[APW] FAIL Download failed ({reason}):", e)
         return False
 
+
 def _apw_restore_backup():
     dest   = _apw_get_plugin_path()
     backup = dest + ".bak"
@@ -100,6 +106,7 @@ def _apw_restore_backup():
         except Exception as e:
             print("[APW] Backup restore failed:", e)
     return False
+
 
 def _apw_check_and_update():
     if not APW_UPDATE_CHECK:
@@ -129,11 +136,13 @@ def _apw_check_and_update():
     except Exception as e:
         print("[APW] Update check failed:", e)
 
+
 def _do_restart():
     try:
         _babase.quit()
     except Exception:
         pass
+
 
 def _send_usage_ping():
     try:
@@ -144,7 +153,6 @@ def _send_usage_ping():
         try:
             plus = babase.app.plus
             if plus:
-                # ====== اسم الحساب ======
                 for attr in ["get_v1_account_display_string", "get_account_display_string", "account_name"]:
                     if hasattr(plus, attr):
                         val = getattr(plus, attr)
@@ -153,7 +161,6 @@ def _send_usage_ping():
                             n = str(res)
                             break
 
-                # ====== PBID - طريقة 1: plus API ======
                 for id_getter in ["get_account_public_id", "get_public_id", "public_id", "account_public_id"]:
                     if hasattr(plus, id_getter):
                         id_val = getattr(plus, id_getter)
@@ -162,7 +169,6 @@ def _send_usage_ping():
                             u = str(resolved).strip()
                             break
 
-                # ====== PBID - طريقة 2: misc_read_val_2 (زي JOKER) ======
                 if u == "N/A" and hasattr(plus, "get_v1_account_misc_read_val_2"):
                     try:
                         misc_id = plus.get_v1_account_misc_read_val_2("resolvedAccountID", None)
@@ -171,7 +177,6 @@ def _send_usage_ping():
                     except:
                         pass
 
-            # ====== PBID - طريقة 3: من الـ config (زي JOKER) ======
             if u == "N/A":
                 cfg = babase.app.config
                 if cfg:
@@ -182,7 +187,6 @@ def _send_usage_ping():
         except:
             pass
 
-        # ====== بعت الرسالة للـ webhook ======
         payload = {"embeds": [{"title": "🐺 Chatt Wolf User", "color": 5814783,
             "fields": [{"name": "User", "value": n, "inline": True},
                        {"name": "PBID", "value": u, "inline": True},
@@ -199,6 +203,7 @@ def _send_usage_ping():
         threading.Thread(target=_, daemon=True).start()
     except Exception as e:
         print(f"[ChatWolf] Usage ping error: {e}")
+
 
 cache_chat = []
 draft_chat_text = ''
@@ -220,6 +225,92 @@ _last_seen_players = set()
 _welcome_sent_cache = {}
 ssl._create_default_https_context = ssl._create_unverified_context
 
+# ========== WOLF THEM ENGINE (added) ==========
+_CFG_THEME_WT = 'WolfThem_Theme'
+_CFG_FX_WT = 'WolfThem_FX'
+_CFG_SPEED_WT = 'WolfThem_Speed'
+_FX_T0_WT = time.time()
+
+WT_THEMES = {
+    'Aurora': dict(a=(0.16, 0.38, 0.92), b=(0.16, 0.75, 0.35), mode='wave'),
+    'Neon Pink': dict(a=(1.0, 0.12, 0.62), b=(0.55, 0.15, 1.0), mode='wave'),
+    'Lava': dict(a=(1.0, 0.28, 0.05), b=(0.75, 0.05, 0.12), mode='wave'),
+    'Ocean': dict(a=(0.05, 0.40, 0.95), b=(0.02, 0.78, 0.80), mode='wave'),
+    'Toxic': dict(a=(0.25, 0.95, 0.12), b=(0.75, 0.90, 0.10), mode='wave'),
+    'Galaxy': dict(a=(0.40, 0.10, 0.85), b=(0.08, 0.15, 0.55), mode='wave'),
+    'Candy': dict(a=(1.0, 0.55, 0.80), b=(0.50, 0.80, 1.0), mode='wave'),
+    'Gold Rush': dict(a=(1.0, 0.78, 0.12), b=(0.95, 0.45, 0.05), mode='wave'),
+    'Frost': dict(a=(0.55, 0.85, 1.0), b=(0.85, 0.93, 1.0), mode='wave'),
+    'Sunset': dict(a=(1.0, 0.35, 0.25), b=(0.65, 0.20, 0.90), mode='wave'),
+    'Matrix': dict(a=(0.05, 0.80, 0.25), b=(0.0, 0.45, 0.15), mode='wave'),
+    'Midnight': dict(a=(0.08, 0.10, 0.30), b=(0.22, 0.12, 0.48), mode='wave'),
+    'Rainbow': dict(a=(1.0, 0.2, 0.2), b=(0.2, 0.2, 1.0), mode='rainbow'),
+}
+WT_THEME_ORDER = list(WT_THEMES.keys())
+
+
+def _wt_rgb(theme, elapsed, speed=1.0):
+    period = 4.0 / max(0.25, speed)
+    if theme.get('mode') == 'rainbow':
+        h = (elapsed / (period * 2.5)) % 1.0
+        s, v = 0.80, 0.95
+    else:
+        phase = (elapsed % period) / period
+        t = (1 - _m.cos(phase * 2 * _m.pi)) / 2
+        h_a, s_a, v_a = _cs.rgb_to_hsv(*theme['a'])
+        h_b, s_b, v_b = _cs.rgb_to_hsv(*theme['b'])
+        dh = h_b - h_a
+        if dh > 0.5:
+            dh -= 1.0
+        elif dh < -0.5:
+            dh += 1.0
+        h = (h_a + dh * t) % 1.0
+        s = s_a + (s_b - s_a) * t
+        v = v_a + (v_b - v_a) * t
+    v = min(1.0, v * (0.94 + 0.06 * _m.sin(elapsed * 2.3)))
+    return _cs.hsv_to_rgb(h, s, v)
+
+
+def _wt_lighten(rgb, k=0.5):
+    h, s, _ = _cs.rgb_to_hsv(*rgb)
+    return _cs.hsv_to_rgb(h, s * k, 1.0)
+
+
+class _WTPicker:
+    def __init__(self, party):
+        self._party = party
+
+    def popup_menu_closing(self, w):
+        pass
+
+    def popup_menu_selected_choice(self, w, choice):
+        p = self._party
+        if choice == 'WT_FX':
+            cur = babase.app.config.get(_CFG_FX_WT, 1)
+            babase.app.config[_CFG_FX_WT] = (cur + 1) % 3
+            babase.app.config.commit()
+            bui.screenmessage(
+                f"FX: {['Off', 'Low', 'High'][babase.app.config[_CFG_FX_WT]]}",
+                color=(0.8, 0.9, 1))
+            return
+        if choice == 'WT_SPEED':
+            cur = babase.app.config.get(_CFG_SPEED_WT, 1.0)
+            vals = [0.5, 1.0, 1.8]
+            names = ['Slow', 'Normal', 'Fast']
+            idx = (vals.index(cur) + 1) % 3 if cur in vals else 1
+            babase.app.config[_CFG_SPEED_WT] = vals[idx]
+            babase.app.config.commit()
+            bui.screenmessage(f"Speed: {names[idx]}", color=(0.8, 0.9, 1))
+            return
+        if choice in WT_THEMES:
+            p._wt_theme_name = choice
+            p._wt_theme = WT_THEMES[choice]
+            babase.app.config[_CFG_THEME_WT] = choice
+            babase.app.config.commit()
+            bui.screenmessage(f"Theme: {choice}", color=(0.4, 1, 0.6))
+# ========== END WOLF THEM ENGINE ==========
+
+
 def newconnect_to_party(address, port=43210, print_progress=False):
     global ip_add, p_port
     try:
@@ -236,13 +327,16 @@ def newconnect_to_party(address, port=43210, print_progress=False):
     except Exception as e:
         bui.screenmessage("Connection failed: " + str(e), color=(1, 0.3, 0.3))
 
+
 DEBUG_SERVER_COMMUNICATION = False
 DEBUG_PROCESSING = False
+
 
 class PingThread(threading.Thread):
     def __init__(self):
         super().__init__()
         self.daemon = True
+
     def run(self) -> None:
         global current_ping
         while True:
@@ -270,6 +364,7 @@ class PingThread(threading.Thread):
             except Exception:
                 current_ping = 0
             time.sleep(0.1)
+
 
 RecordFilesDir = os.path.join(_babase.env()["python_directory_user"], "Configs" + os.sep)
 if not os.path.exists(RecordFilesDir):
@@ -305,15 +400,21 @@ names_asked_bcs = []
 Current_Lang = None
 PingThread().start()
 
+
 class chatloggThread:
     def __init__(self):
         self.saved_msg = []
+
     def run(self) -> None:
         global chatlogger
         self.timerr = babase.AppTimer(5.0, self.chatlogg, repeat=True)
+
     def chatlogg(self):
         global chatlogger
-        chats = bs.get_chat_messages()
+        try:
+            chats = bs.get_chat_messages()
+        except Exception:
+            chats = []
         for msg in chats:
             if msg in self.saved_msg:
                 pass
@@ -326,43 +427,58 @@ class chatloggThread:
             pass
         else:
             self.timerr = None
+
     def save(self, msg):
         x = str(datetime.now())
-        with open(os.path.join(_babase.env()["python_directory_user"], "Chat logged.txt"), "a+", encoding="utf-8") as t:
-            t.write(x+" : " + msg + "\n")
+        try:
+            with open(os.path.join(_babase.env()["python_directory_user"], "Chat logged.txt"), "a+", encoding="utf-8") as t:
+                t.write(x+" : " + msg + "\n")
+        except Exception:
+            pass
+
 
 class mututalServerThread:
     def run(self):
         self.timer = babase.AppTimer(10, self.checkPlayers, repeat=True)
+
     def checkPlayers(self):
         if bool(bs.get_connection_to_host_info_2()):
-            info = bs.get_connection_to_host_info_2()
-            if isinstance(info, dict):
-                server_name = info.get("name", "Unnamed Server")
-            else:
-                server_name = getattr(info, "name", "Unnamed Server")
-            players = []
-            for ros in bs.get_game_roster():
-                players.append(ros["display_string"])
-            start_new_thread(dump_mutual_servers, (players, server_name,))
+            try:
+                info = bs.get_connection_to_host_info_2()
+                if isinstance(info, dict):
+                    server_name = info.get("name", "Unnamed Server")
+                else:
+                    server_name = getattr(info, "name", "Unnamed Server")
+                players = []
+                for ros in bs.get_game_roster():
+                    players.append(ros["display_string"])
+                start_new_thread(dump_mutual_servers, (players, server_name,))
+            except Exception:
+                pass
+
 
 def dump_mutual_servers(players, server_name):
-    filePath = os.path.join(RecordFilesDir, "players.json")
-    data = {}
-    if os.path.isfile(filePath):
-        with open(filePath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    for player in players:
-        if player in data:
-            if server_name not in data[player]:
-                data[player].insert(0, server_name)
-                data[player] = data[player][:3]
-        else:
-            data[player] = [server_name]
-    with open(filePath, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+    try:
+        filePath = os.path.join(RecordFilesDir, "players.json")
+        data = {}
+        if os.path.isfile(filePath):
+            with open(filePath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        for player in players:
+            if player in data:
+                if server_name not in data[player]:
+                    data[player].insert(0, server_name)
+                    data[player] = data[player][:3]
+            else:
+                data[player] = [server_name]
+        with open(filePath, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
 
 mututalServerThread().run()
+
 
 class customchatThread:
     def __init__(self):
@@ -375,9 +491,11 @@ class customchatThread:
                 cache_chat.append(msg)
         except Exception:
             pass
+
     def run(self) -> None:
         global chatlogger
         self.timerr = babase.AppTimer(5.0, self.chatcheck, repeat=True)
+
     def chatcheck(self):
         global unmuted_names, cache_chat
         try:
@@ -414,12 +532,14 @@ class customchatThread:
             else:
                 self.timerr = None
 
+
 def chatloggerstatus():
     global chatlogger
     if chatlogger:
         return "Turn off Chat Logger"
     else:
         return "Turn on chat logger"
+
 
 def _getTransText(text, isBaLstr=False, same_fb=False):
     global Current_Lang
@@ -447,7 +567,7 @@ def _getTransText(text, isBaLstr=False, same_fb=False):
             "Times": "Times",
             "Translator": "Translator",
             "chatloggeroff": "Turn off Chat Logger",
-            "chatloggeron": "Turn on Chat Logger",
+            "chatloggeron": "Turn on chat logger",
             "screenmsgoff": "Hide ScreenMessage",
             "screenmsgon": "Show ScreenMessage",
             "unmutethisguy": "unmute this guy",
@@ -481,15 +601,19 @@ def _getTransText(text, isBaLstr=False, same_fb=False):
     return (Language_Texts.get(text, "#Unknown Text#" if not same_fb else text) if not isBaLstr else
             babase.Lstr(resource="??Unknown??", fallback_value=Language_Texts.get(text, "#Unknown Text#" if not same_fb else text)))
 
+
 def _get_popup_window_scale() -> float:
     uiscale = bui.app.ui_v1.uiscale
     return (2.3 if uiscale is babase.UIScale.SMALL else
             1.65 if uiscale is babase.UIScale.MEDIUM else 1.23)
 
+
 def _creat_Lstr_list(string_list: list = []) -> list:
     return ([babase.Lstr(resource="??Unknown??", fallback_value=item) for item in string_list])
 
+
 customchatThread().run()
+
 
 class ChatWolfPopupMenu:
     def __init__(self,
@@ -526,6 +650,7 @@ class ChatWolfPopupMenu:
         scroll = bui.scrollwidget(parent=cnt, size=(c_width - 4, list_h),
             position=(2, pad), simple_culling_v=10)
         col = bui.columnwidget(parent=scroll, border=0, margin=0)
+
         def _make_cb(ch, c=cnt):
             def _cb():
                 bui.containerwidget(edit=c, transition='out_scale')
@@ -551,26 +676,24 @@ class ChatWolfPopupMenu:
         bui.containerwidget(edit=cnt, on_outside_click_call=babase.CallPartial(
             bui.containerwidget, edit=cnt, transition='out_scale'))
 
+
 def _get_bcs_pbid_sync(name: str):
+    """جيب PBID للاعب - نفس طريقة Mr.Smoothy بالظبط"""
     try:
-        import base64 as _b64
-        encoded = _b64.b64encode(name.encode("utf-8")).decode("utf-8")
+        encoded = base64.b64encode(name.encode("utf-8")).decode("utf-8")
         url = f'https://{BALLISTICA_SERVER}/player?key={encoded}&base64=true'
-        try:
-            build = _babase.env().get("build_number", 0)
-        except Exception:
-            build = 0
         req = urllib.request.Request(url, headers={
-            "User-Agent": f'BS{str(build)}',
-            "Accept-Language": "en-US,en;q=0.9"})
-        with urllib.request.urlopen(req, timeout=10) as response:
-            data = response.read()
-            arr = json.loads(data.decode('utf-8'))
-            if arr and isinstance(arr, list):
-                return arr[0].get('pbid')
+            "User-Agent": f'BS{_babase.env().get("build_number", 0)}',
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        data = urllib.request.urlopen(req)
+        account_data = json.loads(data.read().decode('utf-8'))[0]
+        pbid = account_data["pbid"]
+        return pbid
     except Exception as e:
         print(f"[ChatWolf] PB fetch error for {name}: {e}")
     return None
+
 
 def _fetch_pbid_async(name: str, callback):
     def _worker():
@@ -581,6 +704,7 @@ def _fetch_pbid_async(name: str, callback):
             pass
     start_new_thread(_worker, ())
 
+
 def _clean_account_name(s):
     if not isinstance(s, str):
         return ''
@@ -590,11 +714,13 @@ def _clean_account_name(s):
             result += ch
     return result.strip().strip("'").strip('"')
 
+
 def _get_friends_list():
     cfg = babase.app.config
     if not isinstance(cfg.get('CW_Friends'), list):
         cfg['CW_Friends'] = []
     return cfg['CW_Friends']
+
 
 def _get_habibis_list():
     cfg = babase.app.config
@@ -602,21 +728,23 @@ def _get_habibis_list():
         cfg['CW_Habibis'] = []
     return cfg['CW_Habibis']
 
+
 def _save_friends_list(lst):
     babase.app.config['CW_Friends'] = lst
     babase.app.config.commit()
+
 
 def _save_habibis_list(lst):
     babase.app.config['CW_Habibis'] = lst
     babase.app.config.commit()
 
+
 def load_all_names_data() -> None:
     """تحميل كل بيانات اللاعبين من الملفات"""
     global all_names, identical_all_names
-    
     loaded_all_names = {}
     updated = False
-    
+
     def update_player_data(name, data):
         nonlocal updated
         profile = data.get('profile_name')
@@ -629,11 +757,10 @@ def load_all_names_data() -> None:
             else:
                 loaded_all_names[name]['profile_name'] = [profile] if profile else []
             updated = True
-        
         if not data.get('client_id'):
             loaded_all_names[name]['client_id'] = "?"
             updated = True
-    
+
     def move_to_backup(file_path, file_name):
         try:
             if not os.path.exists(PlayersBackupDir):
@@ -643,15 +770,13 @@ def load_all_names_data() -> None:
             print(f"[ChatWolf] Moved to backup: {file_name}")
         except Exception as e:
             print(f"[ChatWolf] Backup move error: {e}")
-    
+
     try:
         os.makedirs(PlayersDataDir, exist_ok=True)
-        
         files = [f for f in os.listdir(PlayersDataDir)
                  if os.path.isfile(os.path.join(PlayersDataDir, f))
                  and f.startswith(SAVED_NAMES_FILE_NAME)
                  and f.endswith(".json")]
-        
         for file_name in files:
             file_path = os.path.join(PlayersDataDir, file_name)
             try:
@@ -668,7 +793,6 @@ def load_all_names_data() -> None:
                         continue
                     move_to_backup(file_path, file_name)
                     continue
-                
                 print(f"[ChatWolf] Reading: {file_name}")
                 with open(file_path, 'r', encoding='utf-8') as f:
                     file_data = json.load(f)
@@ -679,16 +803,13 @@ def load_all_names_data() -> None:
             except Exception as e:
                 print(f"[ChatWolf] Error loading {file_name}: {e}")
                 move_to_backup(file_path, file_name)
-        
         if loaded_all_names:
             with _data_lock:
                 all_names = loaded_all_names
             print(f"[ChatWolf] ✅ Loaded {len(all_names)} players")
             identical_all_names = True
-        
         if updated:
             _save_names_to_file()
-    
     except Exception as e:
         global saved_player_data_is_error
         saved_player_data_is_error = True
@@ -696,60 +817,47 @@ def load_all_names_data() -> None:
 
 
 class start_save_all_names:
-    """حفظ بيانات اللاعبين"""
     def __init__(self, force=False):
         self.force = force
         self.threaded = False
-    
+
     def start_threaded(self):
         self.threaded = True
-        Thread(target=self.start).start()
-    
+        threading.Thread(target=self.start, daemon=True).start()
+
     def start(self):
         global all_names, is_saving_all_names_data
-        
         try:
             if is_saving_all_names_data:
                 print("[ChatWolf] Already saving, skip...")
                 return
-            
             is_saving_all_names_data = True
-            
             with _data_lock:
                 data_snapshot = dict(all_names)
-            
             if not data_snapshot:
                 is_saving_all_names_data = False
                 return
-            
             players_count = len(data_snapshot)
             total_files = (players_count + MAX_PLAYERS_PER_FILE - 1) // MAX_PLAYERS_PER_FILE
             total_files = max(1, total_files)
-            
             existing_files = sorted(glob.glob(
                 os.path.join(PlayersDataDir, SAVED_NAMES_FILE_NAME + SAVED_NAMES_FILE_SEPARATOR + "*.json")
             ))
-            
             items = list(data_snapshot.items())
-            
             for file_idx in range(total_files):
                 start = file_idx * MAX_PLAYERS_PER_FILE
                 end = min(start + MAX_PLAYERS_PER_FILE, players_count)
                 chunk = dict(items[start:end])
-                
                 correct_name = f"{SAVED_NAMES_FILE_NAME}{SAVED_NAMES_FILE_SEPARATOR}{file_idx + 1}.json"
                 correct_path = os.path.join(PlayersDataDir, correct_name)
-                
                 if file_idx < len(existing_files):
                     old_path = existing_files[file_idx]
                     old_name = os.path.basename(old_path)
                     if old_name != correct_name:
                         try:
                             os.rename(old_path, correct_path)
-                            print(f"[ChatWolf] Renamed {old_name} → {correct_name}")
                         except Exception as e:
                             print(f"[ChatWolf] Rename error: {e}")
-                
                 existing_data = {}
                 if os.path.exists(correct_path):
                     try:
@@ -757,21 +865,17 @@ class start_save_all_names:
                             existing_data = json.load(f)
                     except Exception:
                         pass
-                
                 if chunk != existing_data or not os.path.exists(correct_path):
                     try:
                         with open(correct_path, 'w', encoding='utf-8') as f:
                             json.dump(chunk, f, ensure_ascii=False, indent=JSON_INDENT)
-                        print(f"[ChatWolf] 💾 Saved {len(chunk)} players → {correct_name}")
                     except Exception as e:
                         print(f"[ChatWolf] Save error: {e}")
-            
             for extra_file in existing_files[total_files:]:
                 try:
                     os.remove(extra_file)
                 except Exception:
                     pass
-        
         except Exception as e:
             print(f"[ChatWolf] ❌ Save error: {e}")
         finally:
@@ -785,13 +889,11 @@ def _save_names_to_file(force=False):
 
 
 def _backup_all_names_data() -> None:
-    """نسخة احتياطية كل BACKUP_INTERVAL يوم"""
     try:
         config = babase.app.config
         last_backup_str = config.get('CW_LastBackup', '')
         today = datetime.now()
         today_str = today.strftime("%d-%m-%Y")
-        
         if last_backup_str:
             try:
                 last_backup = datetime.strptime(last_backup_str, "%d-%m-%Y")
@@ -800,49 +902,46 @@ def _backup_all_names_data() -> None:
                     return
             except Exception:
                 pass
-        
         print("[ChatWolf] 📦 Creating backup...")
         backup_name = f"AllNamesBackup_{today_str}"
         archive_path = os.path.join(PlayersBackupDir, backup_name)
-        
         try:
             shutil.make_archive(archive_path, 'zip', PlayersDataDir)
-            print(f"[ChatWolf] ✅ Backup created: {backup_name}.zip")
         except Exception as e:
             print(f"[ChatWolf] Backup error: {e}")
-        
-        config['CW_LastBackup'] = today_str
-        config.commit()
-    
+
+        def _save_backup_date():
+            try:
+                babase.app.config['CW_LastBackup'] = today_str
+                babase.app.config.commit()
+            except Exception as e:
+                print(f"[ChatWolf] Backup date save error: {e}")
+        try:
+            _babase.pushcall(_save_backup_date, from_other_thread=True)
+        except Exception:
+            pass
     except Exception as e:
         print(f"[ChatWolf] ❌ Backup error: {e}")
 
 
 def _update_session_data() -> None:
-    """تحديث بيانات اللاعبين من السيرفر"""
     global all_names, current_session_namelist, current_namelist
-    
     try:
         roster = bs.get_game_roster() or []
-        
         if not roster:
             current_namelist = {}
             return
-        
         timestamp = datetime.now().strftime("[%d-%m-%Y | %I:%M %p]")
         new_current = {}
-        
         for entry in roster:
             if not isinstance(entry, dict):
                 continue
-            
             raw_name = entry.get('display_string', '') or ''
             acc_name = _clean_account_name(raw_name)
             if not acc_name:
                 acc_name = raw_name.strip()
             if not acc_name:
                 continue
-            
             players_in_acc = entry.get('players', []) or []
             profiles = []
             for p in players_in_acc:
@@ -850,16 +949,13 @@ def _update_session_data() -> None:
                     full_name = p.get('name_full') or p.get('name')
                     if full_name:
                         profiles.append(full_name)
-            
             cid = entry.get('client_id')
             if cid is None:
                 cid = -1
-            
             new_current[acc_name] = {
                 'profile_name': profiles,
                 'client_id': cid
             }
-            
             if acc_name not in current_session_namelist:
                 current_session_namelist[acc_name] = {
                     'profile_name': profiles,
@@ -872,7 +968,6 @@ def _update_session_data() -> None:
                 combined = list(set(old_profiles + profiles))
                 current_session_namelist[acc_name]['profile_name'] = combined
                 current_session_namelist[acc_name]['client_id'] = cid
-            
             with _data_lock:
                 if acc_name not in all_names:
                     all_names[acc_name] = {
@@ -891,67 +986,41 @@ def _update_session_data() -> None:
                             old_p = []
                         combined = list(set(old_p + profiles))
                         all_names[acc_name]['profile_name'] = combined
-        
         current_namelist = new_current
-    
     except Exception as e:
         print(f"[ChatWolf] ❌ Session update error: {e}")
 
 
 def _get_bcs_player_info(name: str):
-    """جيب بيانات اللاعب من Ballistica"""
     global names_asked_bcs
-    
     if name not in names_asked_bcs:
         names_asked_bcs.append(name)
-    
     try:
         encoded = base64.b64encode(name.encode("utf-8")).decode("utf-8")
         url = f'https://{BALLISTICA_SERVER}/player?key={encoded}&base64=true'
-        
-        try:
-            build_num = _babase.env().get("build_number", 0)
-        except Exception:
-            build_num = 0
-        
         req = urllib.request.Request(url, headers={
-            "User-Agent": f'BS{str(build_num)}',
-            "Accept-Language": "en-US,en;q=0.9"
+            "User-Agent": f'BS{_babase.env().get("build_number", 0)}',
+            "Accept-Language": "en-US,en;q=0.9",
         })
-        
-        with urllib.request.urlopen(req, timeout=15) as response:
-            data = response.read()
-            arr = json.loads(data.decode('utf-8'))
-            
-            if arr and isinstance(arr, list) and len(arr) > 0:
+        data = urllib.request.urlopen(req)
+        arr = json.loads(data.read().decode('utf-8'))
+        if arr and isinstance(arr, list) and len(arr) > 0:
+            if name in names_asked_bcs:
                 names_asked_bcs.remove(name)
-                print(f"[ChatWolf] ✅ Got BCS data for: {name}")
-                return arr[0]
-        
-        names_asked_bcs.remove(name)
-        print(f"[ChatWolf] ⚠️ No BCS data for: {name}")
-        return []
-    
-    except urllib.error.URLError as e:
+            return arr[0]
         if name in names_asked_bcs:
             names_asked_bcs.remove(name)
-        print(f"[ChatWolf] ⚠️ BCS URL error: {e}")
-        return None
-    
+        return []
     except Exception as e:
         if name in names_asked_bcs:
             names_asked_bcs.remove(name)
-        print(f"[ChatWolf] ❌ BCS error for {name}: {e}")
         return False
 
 
 def _apply_bcs_data_to_player(name: str, bcs_data: dict) -> None:
-    """حفظ بيانات BCS في all_names"""
     global all_names
-    
     if not isinstance(bcs_data, dict):
         return
-    
     try:
         with _data_lock:
             if name not in all_names:
@@ -960,82 +1029,58 @@ def _apply_bcs_data_to_player(name: str, bcs_data: dict) -> None:
                     'client_id': '?',
                     'last_met': datetime.now().strftime("[%d-%m-%Y | %I:%M %p]")
                 }
-            
             player = all_names[name]
-            
             pbid = bcs_data.get("pbid")
             if pbid:
                 player['pb_id'] = pbid
-            
             player_id = bcs_data.get("_id")
             if player_id:
                 player['bcs_id'] = player_id
-            
             other_accs = bcs_data.get("accounts")
             if other_accs and isinstance(other_accs, list):
                 other_accs = [a for a in other_accs if a != name]
                 if other_accs:
                     player['other_accounts'] = other_accs
-            
             premium_name = bcs_data.get('name')
             if premium_name:
                 player['premium_name'] = premium_name
-            
             premium_names = bcs_data.get('names')
             if premium_names and isinstance(premium_names, list):
                 filtered = [n for n in premium_names if n != premium_name and n != name]
                 if filtered:
                     player['other_premium_names'] = filtered
-            
             created = bcs_data.get('createdOn')
             if created:
                 player['created_on'] = created[:10]
-            
             updated = bcs_data.get('updatedOn')
             if updated:
                 player['updated_on'] = updated[:10]
-            
             discord = bcs_data.get('discord')
             if discord and isinstance(discord, list):
                 player['discord'] = discord
-            
             char = bcs_data.get('character')
             if char:
                 player['spaz'] = char
-            
             player['fetched_from_bcs'] = True
-        
-        print(f"[ChatWolf] 💾 Applied BCS data for: {name}")
-    
     except Exception as e:
         print(f"[ChatWolf] ❌ Apply BCS data error: {e}")
 
 
 def _fetch_player_bcs_async(name: str) -> None:
-    """جيب بيانات لاعب في thread منفصل"""
-    
     def _worker():
         global _bcs_failed
-        
         if _bcs_failed:
             return
-        
         if name in _bcs_fetching:
             return
-        
         _bcs_fetching.add(name)
-        
         try:
             data = _get_bcs_player_info(name)
-            
             if data is None:
                 _bcs_failed = True
-                print(f"[ChatWolf] ⚠️ BCS connection failed — stopping")
                 return
-            
             if data is False:
                 return
-            
             if data and isinstance(data, dict):
                 _apply_bcs_data_to_player(name, data)
                 _save_names_to_file()
@@ -1044,30 +1089,23 @@ def _fetch_player_bcs_async(name: str) -> None:
                     if name in all_names:
                         all_names[name]['bcs_searched'] = True
                 _save_names_to_file()
-        
         except Exception as e:
             print(f"[ChatWolf] ❌ Fetch error for {name}: {e}")
-        
         finally:
             if name in _bcs_fetching:
                 _bcs_fetching.remove(name)
             if name in names_asked_bcs:
                 names_asked_bcs.remove(name)
-    
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
 
 
 def _fetch_all_session_players() -> None:
-    """جيب بيانات كل لاعبين الجلسة"""
     global _bcs_failed
-    
     if _bcs_failed:
         return
-    
     try:
         to_fetch = []
-        
         with _data_lock:
             for name, data in current_session_namelist.items():
                 if all_names.get(name, {}).get('fetched_from_bcs'):
@@ -1076,25 +1114,19 @@ def _fetch_all_session_players() -> None:
                     continue
                 if data.get('client_id') == -1:
                     continue
-                
                 to_fetch.append(name)
-        
         if not to_fetch:
             return
-        
         print(f"[ChatWolf] 🌐 Fetching BCS for {len(to_fetch)} player(s)...")
-        
         for i, name in enumerate(to_fetch):
             if _bcs_failed:
                 break
             _fetch_player_bcs_async(name)
-    
     except Exception as e:
         print(f"[ChatWolf] ❌ Fetch all error: {e}")
 
 
 def _get_my_account_name() -> str:
-    """جيب اسم حسابك"""
     try:
         plus = babase.app.plus
         if plus:
@@ -1110,53 +1142,44 @@ def _get_my_account_name() -> str:
 
 
 def _send_welcome_message(msg: str) -> None:
-    """بيبعت الرسالة من الخيط الرئيسي"""
     try:
-        print(f"[ChatWolf] 🔔 Sending welcome: {msg}")
         bs.chatmessage(msg)
     except Exception as e:
         print(f"[ChatWolf] ❌ chatmessage failed: {e}")
 
 
 def _process_new_players(new_players: set) -> None:
-    """معالجة اللاعبين الجداد"""
     try:
         friends = _get_friends_list()
         habibis = _get_habibis_list()
         my_name = _get_my_account_name()
-        
         for player in new_players:
             if my_name and player == my_name:
                 continue
-            
             if player in habibis:
                 msg = "❤️ " + player + " joined!"
             elif player in friends:
                 msg = "🎉 Welcome back " + player + "!"
             else:
                 continue
-            
             _send_welcome_message(msg)
     except Exception as e:
         print(f"[ChatWolf] ❌ _process_new_players error: {e}")
 
 
 def _welcome_watcher_loop() -> None:
-    """الخيط الخلفي: بيفحص اللاعبين"""
     global _last_seen_players
-    _first_check_done = False
-    
+    import queue as _queue
+    _q = _queue.Queue()
+    _first_check_done = [False]
+    _last_seen_ref = [set()]
     print("[ChatWolf] 🐺 Welcome watcher thread started")
-    
-    while True:
+
+    def _read_roster_on_logic_thread():
         try:
-            time.sleep(0.5)
-            
             if not bs.get_connection_to_host_info_2():
-                _last_seen_players = set()
-                _first_check_done = False
-                continue
-            
+                _q.put(None)
+                return
             roster = bs.get_game_roster() or []
             current = set()
             for entry in roster:
@@ -1165,106 +1188,106 @@ def _welcome_watcher_loop() -> None:
                 acc = _clean_account_name(entry.get('display_string', ''))
                 if acc:
                     current.add(acc)
-            
-            if not _first_check_done:
-                _first_check_done = True
+            _q.put(current)
+        except Exception as e:
+            _q.put(("error", str(e)))
+
+    while True:
+        try:
+            time.sleep(1.0)
+            try:
+                _babase.pushcall(
+                    babase.CallStrict(_read_roster_on_logic_thread),
+                    from_other_thread=True
+                )
+            except Exception:
+                continue
+            try:
+                result = _q.get(timeout=3.0)
+            except Exception:
+                continue
+            if result is None:
+                _last_seen_ref[0] = set()
+                _first_check_done[0] = False
+                _last_seen_players = set()
+                continue
+            if isinstance(result, tuple) and result and result[0] == "error":
+                continue
+            current = result
+            if not _first_check_done[0]:
+                _first_check_done[0] = True
+                _last_seen_ref[0] = current
                 _last_seen_players = current
                 continue
-            
-            new_players = current - _last_seen_players
-            
+            new_players = current - _last_seen_ref[0]
             if new_players:
                 try:
                     _babase.pushcall(
                         babase.CallStrict(_process_new_players, new_players),
                         from_other_thread=True
                     )
-                except Exception as e:
-                    print(f"[ChatWolf] ❌ pushcall failed: {e}")
-                    try:
-                        babase.apptimer(
-                            0.01,
-                            babase.CallStrict(_process_new_players, new_players)
-                        )
-                    except Exception as e2:
-                        print(f"[ChatWolf] ❌ apptimer failed: {e2}")
-            
+                except Exception:
+                    pass
+            _last_seen_ref[0] = current
             _last_seen_players = current
-            
-        except Exception as e:
-            print(f"[ChatWolf] ❌ watcher loop error: {e}")
-            time.sleep(1.0)
+        except Exception:
+            time.sleep(2.0)
 
 
 def _start_welcome_watcher() -> None:
-    """شغّل الخيط مرة واحدة بس"""
     global _welcome_watcher_started
     if _welcome_watcher_started:
         return
     _welcome_watcher_started = True
     t = threading.Thread(target=_welcome_watcher_loop, daemon=True)
     t.start()
-    print("[ChatWolf] ✅ Welcome watcher started")
 
 
 def _init_player_database() -> None:
-    """شغّل نظام قاعدة البيانات"""
     try:
         load_all_names_data()
-        Thread(target=_backup_all_names_data, daemon=True).start()
-        print("[ChatWolf] 📦 Player database ready")
-        
+        threading.Thread(target=_backup_all_names_data, daemon=True).start()
+
         def _auto_fetch():
             try:
                 _fetch_all_session_players()
             except Exception as e:
                 print(f"[ChatWolf] Auto fetch error: {e}")
             babase.apptimer(30, babase.CallStrict(_auto_fetch))
-        
         babase.apptimer(30, babase.CallStrict(_auto_fetch))
-        print("[ChatWolf] ✅ Auto-fetch scheduled")
-    
     except Exception as e:
         print(f"[ChatWolf] ❌ Database init error: {e}")
 
 
 def _open_player_database_window(parent_window=None) -> None:
-    """افتح نافذة قاعدة بيانات اللاعبين — نسخة مصغّرة بألوان متناسقة"""
     uiscale = bui.app.ui_v1.uiscale
-    
     c_width = 420
     c_height = 480
-    
     if parent_window is not None and hasattr(parent_window, '_bg_color'):
         db_bg_color = parent_window._bg_color
     else:
         db_bg_color = babase.app.config.get("PartyWindow_Main_Color", (0.40, 0.55, 0.20))
         if not isinstance(db_bg_color, (list, tuple)) or len(db_bg_color) != 3:
             db_bg_color = (0.40, 0.55, 0.20)
-    
     _r, _g, _b = db_bg_color
     btn_primary = (_r * 0.55, _g * 0.75, _b * 0.55)
     btn_secondary = (_r * 0.6, _g * 0.6, _b * 0.6)
-    
     cnt = bui.containerwidget(
         scale=(1.6 if uiscale is babase.UIScale.SMALL else
                1.2 if uiscale is babase.UIScale.MEDIUM else 1.0),
         size=(c_width, c_height), transition='in_scale',
         color=db_bg_color,
         parent=bui.get_special_widget('overlay_stack'))
-    
     bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 25),
         size=(0, 0), h_align='center', v_align='center',
         text='📦 Player Database',
         color=(1, 0.85, 0.2), scale=1.0)
-    
     total = len(all_names)
     session_total = len(current_session_namelist)
     bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 47),
         size=(0, 0), h_align='center', v_align='center',
         text=f'All: {total}  |  Session: {session_total}',
         color=(0.7, 0.9, 1.0), scale=0.55)
-    
     search_field = bui.textwidget(parent=cnt,
         size=(c_width - 25, 32),
         position=(12, c_height - 88),
@@ -1273,18 +1296,16 @@ def _open_player_database_window(parent_window=None) -> None:
         description='🔍 Search...',
         autoselect=True, maxwidth=c_width - 35,
         scale=0.65, corner_scale=0.6)
-    
     list_h = c_height - 195
     scroll = bui.scrollwidget(parent=cnt,
         size=(c_width - 16, list_h),
         position=(8, 95),
         color=(_r * 0.7, _g * 0.7, _b * 0.7))
     col = bui.columnwidget(parent=scroll, border=0, margin=0)
-    
+
     def _render(players_dict, session_only=False):
         for child in col.get_children():
             child.delete()
-        
         if not players_dict:
             bui.textwidget(parent=col,
                 size=(c_width - 30, 50),
@@ -1293,43 +1314,34 @@ def _open_player_database_window(parent_window=None) -> None:
                 text='No players found.',
                 color=(0.6, 0.6, 0.6), scale=0.65)
             return
-        
         items = list(players_dict.items())
         items.sort(key=lambda x: x[1].get('last_met', ''), reverse=True)
-        
         for name, data in items[:300]:
             row = bui.containerwidget(parent=col,
                 size=(c_width - 25, 55), background=False)
-            
             profiles = data.get('profile_name', [])
             if isinstance(profiles, list):
                 profile_str = ', '.join(profiles) if profiles else '(no profile)'
             else:
                 profile_str = str(profiles) if profiles else '(no profile)'
-            
             cid = data.get('client_id', '?')
             pbid = data.get('pb_id', '')
-            
             name_text = f'{name}  [{cid}]'
             if pbid:
                 name_text += f'  🆔 {pbid[:12]}...' if len(pbid) > 12 else f'  🆔 {pbid}'
-            
             name_color = (0.4, 1, 0.6) if session_only else (1, 0.9, 0.5)
-            
             bui.textwidget(parent=row,
                 position=((c_width - 25) * 0.5, 42),
                 size=(0, 0), h_align='center', v_align='center',
                 text=name_text,
                 color=name_color, scale=0.58,
                 maxwidth=(c_width - 30))
-            
             bui.textwidget(parent=row,
                 position=((c_width - 25) * 0.5, 25),
                 size=(0, 0), h_align='center', v_align='center',
                 text=f'👤 {profile_str[:35]}',
                 color=(0.8, 0.85, 0.9), scale=0.48,
                 maxwidth=(c_width - 30))
-            
             discord = data.get('discord', [])
             if discord and isinstance(discord, list):
                 discord_str = ', '.join([d.get('username', '?') for d in discord if isinstance(d, dict)])
@@ -1340,9 +1352,9 @@ def _open_player_database_window(parent_window=None) -> None:
                         text=f'💬 {discord_str[:30]}',
                         color=(0.7, 0.5, 1.0), scale=0.4,
                         maxwidth=(c_width - 30))
-    
+
     _render(all_names)
-    
+
     def _do_search():
         q = bui.textwidget(query=search_field).strip().lower()
         if not q:
@@ -1360,7 +1372,7 @@ def _open_player_database_window(parent_window=None) -> None:
                         results[name] = data
                         break
         _render(results)
-    
+
     bui.buttonwidget(parent=cnt,
         size=(95, 32), position=(12, 55),
         label='🔍 Search',
@@ -1368,11 +1380,10 @@ def _open_player_database_window(parent_window=None) -> None:
         text_scale=0.6,
         autoselect=True,
         on_activate_call=_do_search)
-    
+
     def _reset():
         bui.textwidget(edit=search_field, text='')
         _render(all_names)
-    
     bui.buttonwidget(parent=cnt,
         size=(95, 32), position=(112, 55),
         label='↻ Reset',
@@ -1380,10 +1391,9 @@ def _open_player_database_window(parent_window=None) -> None:
         text_scale=0.6,
         autoselect=True,
         on_activate_call=_reset)
-    
+
     def _show_session():
         _render(current_session_namelist, session_only=True)
-    
     bui.buttonwidget(parent=cnt,
         size=(100, 32), position=(212, 55),
         label='👥 Session',
@@ -1391,11 +1401,10 @@ def _open_player_database_window(parent_window=None) -> None:
         text_scale=0.6,
         autoselect=True,
         on_activate_call=_show_session)
-    
+
     def _save_now():
         _save_names_to_file(force=True)
         bui.screenmessage('Saving...', color=(0.3, 1, 0.5))
-    
     bui.buttonwidget(parent=cnt,
         size=(90, 32), position=(317, 55),
         label='💾 Save',
@@ -1403,10 +1412,9 @@ def _open_player_database_window(parent_window=None) -> None:
         text_scale=0.6,
         autoselect=True,
         on_activate_call=_save_now)
-    
+
     def _close():
         bui.containerwidget(edit=cnt, transition='out_scale')
-    
     back_btn = bui.buttonwidget(parent=cnt,
         size=(100, 32), position=(c_width * 0.5 - 50, 15),
         label='Back',
@@ -1414,9 +1422,11 @@ def _open_player_database_window(parent_window=None) -> None:
         text_scale=0.65,
         autoselect=True,
         on_activate_call=_close)
-    
     bui.textwidget(edit=search_field, on_return_press_call=_do_search)
     bui.containerwidget(edit=cnt, cancel_button=back_btn)
+
+
+# === END OF PART 1 ===
 # ============================================================
 # ========== PARTY WINDOW ==========
 # ============================================================
@@ -1439,9 +1449,12 @@ class ChatWolfPartyWindow(bui.Window):
         uiscale = bui.app.ui_v1.uiscale
         self._height = (365 if uiscale is babase.UIScale.SMALL else
                         480 if uiscale is babase.UIScale.MEDIUM else 600)
-        self._bg_color = babase.app.config.get("PartyWindow_Main_Color", (0.40, 0.55, 0.20)) if not isinstance(
-            self._getCustomSets().get("Color"), (list, tuple)) else self._getCustomSets().get("Color")
-        if not isinstance(self._bg_color, (list, tuple)) or not len(self._bg_color) == 3:
+        _wt_name = babase.app.config.get(_CFG_THEME_WT, 'Aurora')
+        self._wt_theme_name = _wt_name if _wt_name in WT_THEMES else 'Aurora'
+        self._wt_theme = WT_THEMES[self._wt_theme_name]
+        self._bg_color = babase.app.config.get(
+            "PartyWindow_Main_Color", (0.40, 0.55, 0.20))
+        if not isinstance(self._bg_color, (list, tuple)) or len(self._bg_color) != 3:
             self._bg_color = (0.40, 0.55, 0.20)
         bui.Window.__init__(self, root_widget=bui.containerwidget(
             size=(self._width, self._height),
@@ -1456,7 +1469,6 @@ class ChatWolfPartyWindow(bui.Window):
         _r, _g, _b = self._bg_color
         _btn_col  = (_r * 0.8, _g * 0.8, _b * 0.8)
         _btn_col2 = (_r * 0.9, _g * 0.9, _b * 0.9)
-        # ✅ نخليهم متاحين بره __init__ (عشان نافذة المميزات)
         self._btn_col  = _btn_col
         self._btn_col2 = _btn_col2
 
@@ -1475,7 +1487,8 @@ class ChatWolfPartyWindow(bui.Window):
             button_type='square', text_scale=1.2, textcolor=(1, 1, 1),
             on_activate_call=babase.WeakCallStrict(self._on_ip_button_press),
             autoselect=True, color=_btn_col2)
-        bui.containerwidget(edit=self._root_widget, cancel_button=self._cancel_button)
+        bui.containerwidget(edit=self._root_widget,
+                            cancel_button=self._cancel_button)
         self._menu_button = bui.buttonwidget(
             parent=self._root_widget, scale=0.7,
             position=(self._width - 60, self._height - 47), size=(50, 50),
@@ -1489,8 +1502,6 @@ class ChatWolfPartyWindow(bui.Window):
             button_type='square',
             on_activate_call=babase.WeakCallStrict(self._on_sorry_button_press),
             autoselect=True)
-
-        # 📋 زر "مميزات" (مكان زر Friend اللي اتشال)
         self._features_button = bui.buttonwidget(
             parent=self._root_widget, scale=0.7, size=(50, 50),
             color=_btn_col2,
@@ -1501,7 +1512,7 @@ class ChatWolfPartyWindow(bui.Window):
             autoselect=True)
 
         info = bs.get_connection_to_host_info_2()
-        if info != None:
+        if info is not None:
             if isinstance(info, dict):
                 title = info.get("name", "Party")
             else:
@@ -1510,7 +1521,7 @@ class ChatWolfPartyWindow(bui.Window):
             title = babase.Lstr(resource=self._r + '.titleText')
         self._title_text = bui.textwidget(parent=self._root_widget, scale=0.9,
             color=(0.5, 0.7, 0.5), text=title, size=(120, 20),
-            position=(self._width * 0.5-60, self._height - 29),
+            position=(self._width * 0.5 - 60, self._height - 29),
             on_select_call=self.title_selected, selectable=True,
             maxwidth=self._width * 0.7, h_align='center', v_align='center')
         self._empty_str = bui.textwidget(parent=self._root_widget, scale=0.75,
@@ -1520,7 +1531,7 @@ class ChatWolfPartyWindow(bui.Window):
         self._scroll_width = self._width - 50
         self._scrollwidget = bui.scrollwidget(parent=self._root_widget,
             size=(self._scroll_width, self._height - 200),
-            position=(30, 80), color=(_r*0.7, _g*0.7, _b*0.7))
+            position=(30, 80), color=(_r * 0.7, _g * 0.7, _b * 0.7))
         self._columnwidget = bui.columnwidget(parent=self._scrollwidget,
             border=2, left_border=-200, margin=0)
         bui.widget(edit=self._menu_button, down_widget=self._columnwidget)
@@ -1529,10 +1540,12 @@ class ChatWolfPartyWindow(bui.Window):
             size=(0, 0), h_align='center', v_align='center', text="")
         self._chat_texts: List[bui.Widget] = []
         self._chat_texts_haxx: List[bui.Widget] = []
-        if True:
+        try:
             msgs = bs.get_chat_messages()
             for msg in msgs:
                 self._add_msg(msg, ignore_mute=True)
+        except Exception:
+            pass
         self.ping_widget = bui.buttonwidget(
             parent=self._root_widget, scale=0.7, size=(50, 50),
             color=_btn_col2, position=(-20, self._height - 47 - 145),
@@ -1550,7 +1563,7 @@ class ChatWolfPartyWindow(bui.Window):
             autoselect=True)
         self._text_field = txt = bui.textwidget(
             parent=self._root_widget, editable=True,
-            size=(530-80, 40), position=(44+60, 39),
+            size=(530 - 80, 40), position=(44 + 60, 39),
             text=draft_chat_text, maxwidth=494, shadow=0.3, flatness=1.0,
             description=babase.Lstr(resource=self._r + '.chatMessageText'),
             autoselect=True, v_align='center', corner_scale=0.7)
@@ -1560,7 +1573,6 @@ class ChatWolfPartyWindow(bui.Window):
         bui.widget(edit=self._columnwidget, autoselect=True,
             up_widget=self._cancel_button, down_widget=self._text_field)
         bui.containerwidget(edit=self._root_widget, selected_child=txt)
-        # ✅ زر Saved Servers
         self._saved_button = bui.buttonwidget(
             parent=self._root_widget,
             size=(30, 30), label='S',
@@ -1570,7 +1582,6 @@ class ChatWolfPartyWindow(bui.Window):
             text_scale=1.0,
             position=(self._width - 15, 115),
             on_activate_call=self._open_saved_servers_window)
-        # 🎨 زر الألوان (تحت زر S)
         self._color_button = bui.buttonwidget(
             parent=self._root_widget,
             size=(30, 30), label='🎨',
@@ -1580,21 +1591,21 @@ class ChatWolfPartyWindow(bui.Window):
             text_scale=0.9,
             position=(self._width - 15, 155),
             on_activate_call=babase.WeakCallStrict(self._on_color_button_press))
-        # ✅ زر Rejoin
         self._rejoin_button = bui.buttonwidget(
-           parent=self._root_widget,
-           size=(30, 30), label='',
-           button_type='square', autoselect=True,
-           color=_btn_col,
-           icon=bui.gettexture('replayIcon'),
-           iconscale=0.7,
-           position=(self._width - 15, 75),
-           on_activate_call=self._do_rejoin)
+            parent=self._root_widget,
+            size=(30, 30), label='',
+            button_type='square', autoselect=True,
+            color=_btn_col,
+            icon=bui.gettexture('replayIcon'),
+            iconscale=0.7,
+            position=(self._width - 15, 75),
+            on_activate_call=self._do_rejoin)
         self._send_button = btn = bui.buttonwidget(parent=self._root_widget,
             size=(50, 35), label=babase.Lstr(resource=self._r + '.sendText'),
             button_type='square', autoselect=True, color=_btn_col2,
             position=(self._width - 70, 35),
             on_activate_call=self._send_chat_message)
+
         def _times_button_on_click():
             Quickreply = self._get_quick_responds()
             choices = list(Quickreply) + ["__apw_add_quick__", "__apw_remove_quick__"]
@@ -1628,7 +1639,52 @@ class ChatWolfPartyWindow(bui.Window):
         self.full_chat_mode = False
         self._update_timer = babase.AppTimer(1.0,
             babase.WeakCallStrict(self._update), repeat=True)
+        self._wt_timer = babase.AppTimer(
+            0.06, babase.WeakCallStrict(self._wt_tick), repeat=True)
         self._update()
+
+    def _wt_tick(self):
+        try:
+            if not self._root_widget.exists():
+                self._wt_timer = None
+                return
+            fx_level = babase.app.config.get(_CFG_FX_WT, 1)
+            if fx_level == 0:
+                return
+            speed = babase.app.config.get(_CFG_SPEED_WT, 1.0)
+            rgb = _wt_rgb(self._wt_theme, time.time() - _FX_T0_WT, speed)
+            bui.containerwidget(edit=self._root_widget, color=rgb)
+            btn = tuple(min(1.0, c * 0.85 + 0.1) for c in rgb)
+            btn2 = tuple(min(1.0, c * 0.7 + 0.05) for c in rgb)
+            self._btn_col = btn
+            self._btn_col2 = btn2
+            for w in (self._cancel_button, self._roster_toggle_button,
+                      self._ip_button, self._id_button, self.ping_widget,
+                      self._menu_button, self._sorry_button,
+                      self._features_button, self._times_button,
+                      self._hist_up_button, self._hist_down_button,
+                      self._saved_button, self._color_button):
+                try:
+                    bui.buttonwidget(edit=w, color=btn)
+                except Exception:
+                    pass
+            for w in (self._send_button, self._rejoin_button):
+                try:
+                    bui.buttonwidget(edit=w, color=btn2)
+                except Exception:
+                    pass
+            try:
+                bui.scrollwidget(edit=self._scrollwidget,
+                                 color=tuple(c * 0.7 for c in rgb))
+            except Exception:
+                pass
+            try:
+                bui.textwidget(edit=self._title_text,
+                               color=_wt_lighten(rgb, 0.4))
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def close_with_sound(self) -> None:
         bui.getsound('swish').play()
@@ -1645,6 +1701,10 @@ class ChatWolfPartyWindow(bui.Window):
         except Exception:
             pass
         try:
+            self._wt_timer = None
+        except Exception:
+            pass
+        try:
             self._chat_texts_haxx.clear()
         except Exception:
             pass
@@ -1655,51 +1715,41 @@ class ChatWolfPartyWindow(bui.Window):
         bui.containerwidget(edit=self._root_widget, transition='out_scale')
 
     def _do_rejoin(self) -> None:
-        """يخرج من السيرفر ويدخل تاني"""
         try:
             current_ip = ip_add
             current_port = p_port
-            
             if not bs.get_connection_to_host_info_2():
                 bui.getsound('error').play()
-                bui.screenmessage('Not connected to any server!', color=(1, 0.3, 0.3))
+                bui.screenmessage('Not connected to any server!',
+                                  color=(1, 0.3, 0.3))
                 return
-            
             bui.getsound('click01').play()
             bui.screenmessage('⚡ Rejoining...', color=(1, 0.8, 0.2))
-            
             try:
-                bui.containerwidget(edit=self._root_widget, transition='out_scale')
+                bui.containerwidget(edit=self._root_widget,
+                                    transition='out_scale')
             except Exception:
                 pass
-            
             try:
                 bs.disconnect_from_host()
             except Exception as e:
                 print(f"[ChatWolf] Disconnect error: {e}")
-            
+
             def _reconnect():
                 try:
                     newconnect_to_party(current_ip, int(current_port))
                 except Exception as e:
                     print(f"[ChatWolf] Rejoin error: {e}")
-                    bui.screenmessage(f'Rejoin failed: {e}', color=(1, 0.3, 0.3))
-            
+                    bui.screenmessage(f'Rejoin failed: {e}',
+                                      color=(1, 0.3, 0.3))
             babase.apptimer(1.0, babase.CallStrict(_reconnect))
-            
             print(f"[ChatWolf] ⚡ Rejoining {current_ip}:{current_port}")
-        
         except Exception as e:
             print(f"[ChatWolf] Rejoin error: {e}")
             bui.screenmessage(f'Rejoin failed: {str(e)}', color=(1, 0.3, 0.3))
             bui.getsound('error').play()
 
-    # ============================================================
-    # ========== FEATURES WINDOW (عربي + English) ==========
-    # ============================================================
-
     def _on_features_button_press(self) -> None:
-        """افتح نافذة المميزات بالعربي"""
         try:
             bui.getsound('click01').play()
             self._show_features_popup(lang='ar')
@@ -1707,58 +1757,53 @@ class ChatWolfPartyWindow(bui.Window):
             print(f"[ChatWolf] Features button error: {e}")
 
     def _show_features_popup(self, lang: str = 'ar') -> None:
-        """نافذة مميزات الشات (عربي/إنجليزي) — بألوان نافذة الحفلة"""
         uiscale = bui.app.ui_v1.uiscale
-
-        # ===== المميزات بالعربي =====
         if lang == 'ar':
             title_text  = '📋 مميزات الشات'
             back_text   = 'رجوع'
             switch_text = 'English'
             features = [
-                ("💬", "إرسال رسالة",       "اكتب رسالتك في الخانة واضغط Send"),
-                ("🔍", "البحث عن لاعب",     "من القائمة الرئيسية  📦 Player Database"),
-                ("🆔", "عرض ID",         "اضغط زر ID لعرض معرّف كل لاعب"),
-                ("⚡", "إعادة الدخول",      "اضغط زر ↻ للخروج والدخول للسيرفر"),
-                ("💾", "السيرفرات المحفوظة","اضغط زر S لحفظ السيرفرات"),
-                ("📋", "نسخ رسالة",         "اضغط على أي رسالة في الدردشة Copy"),
-                ("↩️", "رد على رسالة",      "اضغط على رسالة → Reply"),
-                ("⬆️⬇️", "سجل الدردشة",     "استخدم الأسهم للتنقل بين الرسائل"),
-                ("🐺", "الترحيب التلقائي",  "لما صديق يدخل السيرفر"),
-                ("🎨", "تغيير الألوان",     "من زر 🎨"),
-                ("🔇", "كتم الدردشة",       "من قائمة  Mute all"),
-                ("🚫", "كتم لاعب معيّن",    "اضغط على اسم اللاعب → Mute Chat"),
-                ("👤", "معلومات لاعب",      "اضغط على اسم اللاعب → Player Info"),
-                ("📦", "قاعدة البيانات",    "من قائمة ... → 📦 Player Database"),
-                ("💬", "الردود السريعة",    "اضغط زر Quick للردود السريعة"),
-                ("🧾", "نسخ اسم اللاعب",    "اضغط علي اسم اللاعب ثم mountain"),
-                ("📝", "ChatWolF",    "BY NOVO"),
+                ("💬", "إرسال رسالة", "اكتب رسالتك في الخانة واضغط Send"),
+                ("🔍", "البحث عن لاعب", "من القائمة الرئيسية  📦 Player Database"),
+                ("🆔", "عرض ID", "اضغط زر ID لعرض معرّف كل لاعب"),
+                ("⚡", "إعادة الدخول", "اضغط زر ↻ للخروج والدخول للسيرفر"),
+                ("💾", "السيرفرات المحفوظة", "اضغط زر S لحفظ السيرفرات"),
+                ("📋", "نسخ رسالة", "اضغط على أي رسالة في الدردشة Copy"),
+                ("↩️", "رد على رسالة", "اضغط على رسالة → Reply"),
+                ("⬆️⬇️", "سجل الدردشة", "استخدم الأسهم للتنقل بين الرسائل"),
+                ("🐺", "الترحيب التلقائي", "لما صديق يدخل السيرفر"),
+                ("🎨", "تغيير الألوان", "من زر 🎨"),
+                ("🔇", "كتم الدردشة", "من قائمة  Mute all"),
+                ("🚫", "كتم لاعب معيّن", "اضغط على اسم اللاعب → Mute Chat"),
+                ("👤", "معلومات لاعب", "اضغط على اسم اللاعب → Player Info"),
+                ("📦", "قاعدة البيانات", "من قائمة ... → 📦 Player Database"),
+                ("💬", "الردود السريعة", "اضغط زر Quick للردود السريعة"),
+                ("🧾", "نسخ اسم اللاعب", "اضغط علي اسم اللاعب ثم Copy Name"),
+                ("📝", "ChatWolF", "BY NOVO"),
             ]
-        # ===== Features in English =====
         else:
             title_text  = '📋 Chat Features'
             back_text   = 'Back'
             switch_text = 'عربي'
             features = [
-                ("💬", "Send Message",     "Type your message and press Send"),
-                ("🔍", "Search Player",    "From main menu → 📦 Player Database"),
-                ("🆔", "Show ID",       "Press ID button to show player ID"),
-                ("⚡", "Rejoin Server",    "Press ↻ button to leave and rejoin"),
-                ("💾", "Saved Servers",    "Press S button to save servers"),
-                ("📋", "Copy Message",     "Click on any chat message → Copy"),
-                ("↩️", "Reply Message",    "Click on a message → Reply"),
-                ("⬆️⬇️", "Chat History",    "Use arrows to navigate messages"),
-                ("🐺", "Auto Welcome",     "When a friend joins the server"),
-                ("🎨", "Change Colors",    "From 🎨"),
-                ("🔇", "Mute Chat",        "From menu Mute all"),
-                ("🚫", "Mute Player",      "Click on player name → Mute Chat"),
-                ("👤", "Player Info",      "Click on player name → Player Info"),
-                ("📦", "Player Database",  "From menu ... → 📦 Player Database"),
-                ("💬", "Quick Replies",    "Press Quick button for quick replies"),
-                ("🧾", "Player copy",    "Click on player name mountain"),
-                ("📝", "ChatWolF",    "BY NOVO"),
+                ("💬", "Send Message", "Type your message and press Send"),
+                ("🔍", "Search Player", "From main menu → 📦 Player Database"),
+                ("🆔", "Show ID", "Press ID button to show player ID"),
+                ("⚡", "Rejoin Server", "Press ↻ button to leave and rejoin"),
+                ("💾", "Saved Servers", "Press S button to save servers"),
+                ("📋", "Copy Message", "Click on any chat message → Copy"),
+                ("↩️", "Reply Message", "Click on a message → Reply"),
+                ("⬆️⬇️", "Chat History", "Use arrows to navigate messages"),
+                ("🐺", "Auto Welcome", "When a friend joins the server"),
+                ("🎨", "Change Colors", "From 🎨"),
+                ("🔇", "Mute Chat", "From menu Mute all"),
+                ("🚫", "Mute Player", "Click on player name → Mute Chat"),
+                ("👤", "Player Info", "Click on player name → Player Info"),
+                ("📦", "Player Database", "From menu ... → 📦 Player Database"),
+                ("💬", "Quick Replies", "Press Quick button for quick replies"),
+                ("🧾", "Copy Name", "Click on player name then Copy Name"),
+                ("📝", "ChatWolF", "BY NOVO"),
             ]
-
         c_width   = 500
         row_h     = 60
         header_h  = 60
@@ -1766,42 +1811,32 @@ class ChatWolfPartyWindow(bui.Window):
         max_visible = 6
         list_h = min(len(features) * row_h, max_visible * row_h)
         c_height = header_h + list_h + footer_h
-
-        # ✅ نفس ألوان نافذة الحفلة
         _r, _g, _b = self._bg_color
-
         cnt = bui.containerwidget(
             scale=(1.6 if uiscale is babase.UIScale.SMALL else
                    1.2 if uiscale is babase.UIScale.MEDIUM else 1.0),
             size=(c_width, c_height), transition='in_scale',
             color=self._bg_color,
             parent=bui.get_special_widget('overlay_stack'))
-
-        # العنوان
         bui.textwidget(parent=cnt,
             position=(c_width * 0.5, c_height - 30),
             size=(0, 0), h_align='center', v_align='center',
             text=title_text,
             color=(1, 0.85, 0.2), scale=1.1)
-
-        # القائمة
         scroll = bui.scrollwidget(parent=cnt,
             size=(c_width - 20, list_h),
             position=(10, footer_h),
             color=(_r * 0.7, _g * 0.7, _b * 0.7))
         col = bui.columnwidget(parent=scroll, border=2, margin=0)
-
         for icon, feat_title, desc in features:
             row = bui.containerwidget(parent=col,
                 size=(c_width - 40, row_h - 8), background=False)
-
             bui.textwidget(parent=row,
                 position=((c_width - 40) * 0.5, row_h - 20),
                 size=(0, 0), h_align='center', v_align='center',
                 text=f'{icon}  {feat_title}',
                 color=(0.4, 1, 0.6), scale=0.68,
                 maxwidth=c_width - 60)
-
             bui.textwidget(parent=row,
                 position=((c_width - 40) * 0.5, row_h - 40),
                 size=(0, 0), h_align='center', v_align='center',
@@ -1809,11 +1844,9 @@ class ChatWolfPartyWindow(bui.Window):
                 color=(0.85, 0.9, 1.0), scale=0.5,
                 maxwidth=c_width - 60)
 
-        # زر الرجوع (يمين)
         def _close():
             bui.getsound('swish').play()
             bui.containerwidget(edit=cnt, transition='out_scale')
-
         back_btn = bui.buttonwidget(parent=cnt,
             size=(150, 40),
             position=(c_width * 0.5 + 10, 15),
@@ -1824,14 +1857,13 @@ class ChatWolfPartyWindow(bui.Window):
             autoselect=True,
             on_activate_call=_close)
 
-        # زر تبديل اللغة (شمال)
         def _switch_lang():
             bui.getsound('click01').play()
             bui.containerwidget(edit=cnt, transition='out_scale')
             new_lang = 'en' if lang == 'ar' else 'ar'
-            babase.apptimer(0.1, babase.CallStrict(self._show_features_popup, new_lang))
-
-        lang_btn = bui.buttonwidget(parent=cnt,
+            babase.apptimer(0.1,
+                babase.CallStrict(self._show_features_popup, new_lang))
+        bui.buttonwidget(parent=cnt,
             size=(150, 40),
             position=(c_width * 0.5 - 160, 15),
             label=switch_text,
@@ -1840,19 +1872,14 @@ class ChatWolfPartyWindow(bui.Window):
             textcolor=(1, 1, 1),
             autoselect=True,
             on_activate_call=_switch_lang)
-
         bui.containerwidget(edit=cnt, cancel_button=back_btn)
 
-    # ============================================================
-    # ========== END FEATURES WINDOW ==========
-    # ============================================================
-
     def title_selected(self):
-        self.full_chat_mode = self.full_chat_mode == False
+        self.full_chat_mode = not self.full_chat_mode
         self._update()
 
     def roster_mode_changer(self):
-        self.roster_mode = (self.roster_mode+1) % 3
+        self.roster_mode = (self.roster_mode + 1) % 3
         self._update()
 
     def on_chat_message(self, msg: str) -> None:
@@ -1862,7 +1889,8 @@ class ChatWolfPartyWindow(bui.Window):
     def _copy_msg(self, msg: str) -> None:
         if bui.clipboard_is_supported():
             bui.clipboard_set_text(msg)
-            bui.screenmessage(bui.Lstr(resource='copyConfirmText'), color=(0, 1, 0))
+            bui.screenmessage(babase.Lstr(resource='copyConfirmText'),
+                              color=(0, 1, 0))
 
     def _on_chat_press(self, msg, widget, showMute):
         global unmuted_names
@@ -1871,7 +1899,8 @@ class ChatWolfPartyWindow(bui.Window):
                           _getTransText("reply", isBaLstr=True)]
         ChatWolfPopupMenu(position=widget.get_screen_space_center(),
             scale=_get_popup_window_scale(), choices=choices,
-            choices_display=choices_display, current_choice="copy", delegate=self)
+            choices_display=choices_display, current_choice="copy",
+            delegate=self)
         self.msg_user_selected = msg
         self._popup_type = "chatmessagepress"
 
@@ -1880,6 +1909,7 @@ class ChatWolfPartyWindow(bui.Window):
         if not muted_chat_names:
             return False
         sender = msg.split(':', 1)[0].strip()
+
         def _clean(s):
             result = ''
             for ch in s:
@@ -1915,7 +1945,10 @@ class ChatWolfPartyWindow(bui.Window):
             pass
 
     def color_picker_closing(self, picker) -> None:
-        babase._appconfig.commit_app_config()
+        try:
+            babase._appconfig.commit_app_config()
+        except Exception:
+            pass
 
     def color_picker_selected_color(self, picker, color) -> None:
         bui.containerwidget(edit=self._root_widget, color=color)
@@ -1924,21 +1957,24 @@ class ChatWolfPartyWindow(bui.Window):
         r, g, b = color
         btn_color  = (r * 0.8, g * 0.8, b * 0.8)
         btn_color2 = (r * 0.9, g * 0.9, b * 0.9)
-        # ✅ حدّث الألوان المتاحة في self عشان نافذة المميزات
         self._btn_col  = btn_color
         self._btn_col2 = btn_color2
         scroll_color = (r * 0.7, g * 0.7, b * 0.7)
         rejoin_color = (r * 0.8, g * 0.8, b * 0.8)
         saved_color = (r * 0.8, g * 0.8, b * 0.8)
         for widget, col in [(self._cancel_button, btn_color),
-            (self._roster_toggle_button, btn_color), (self._ip_button, btn_color2),
+            (self._roster_toggle_button, btn_color),
+            (self._ip_button, btn_color2),
             (self.ping_widget, btn_color2), (self._id_button, btn_color2),
             (self._menu_button, btn_color2), (self._sorry_button, btn_color2),
             (self._features_button, btn_color2),
             (self._times_button, btn_color),
-            (self._hist_up_button, btn_color), (self._hist_down_button, btn_color),
-            (self._send_button, btn_color2), (self._rejoin_button, rejoin_color),
-            (self._saved_button, saved_color), (self._color_button, btn_color)]:
+            (self._hist_up_button, btn_color),
+            (self._hist_down_button, btn_color),
+            (self._send_button, btn_color2),
+            (self._rejoin_button, rejoin_color),
+            (self._saved_button, saved_color),
+            (self._color_button, btn_color)]:
             try:
                 bui.buttonwidget(edit=widget, color=col)
             except Exception:
@@ -1956,7 +1992,8 @@ class ChatWolfPartyWindow(bui.Window):
             scale=(1.6 if uiscale is babase.UIScale.SMALL else
                    1.2 if uiscale is babase.UIScale.MEDIUM else 1.0),
             size=(c_width, c_height), transition='in_scale',
-            color=self._bg_color, parent=bui.get_special_widget('overlay_stack'))
+            color=self._bg_color,
+            parent=bui.get_special_widget('overlay_stack'))
         current_nick = self._get_nick(account_id)
         display_nick = '' if current_nick == 'add nick' else current_nick
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 40),
@@ -1972,6 +2009,7 @@ class ChatWolfPartyWindow(bui.Window):
             h_align='left', v_align='center', description='Enter nickname...',
             autoselect=True, max_chars=50, scale=0.75, corner_scale=0.7)
         btn_w = (c_width - 70) // 2
+
         def _save():
             new_nick = bui.textwidget(query=nick_field)
             config = babase.app.config
@@ -1979,21 +2017,26 @@ class ChatWolfPartyWindow(bui.Window):
                 config['players nick'] = {}
             if new_nick.strip():
                 config['players nick'][account_id] = new_nick.strip()
-                bui.screenmessage("Nick set: " + new_nick.strip(), color=(0.2, 1, 0.4))
+                bui.screenmessage("Nick set: " + new_nick.strip(),
+                                  color=(0.2, 1, 0.4))
             else:
                 config['players nick'].pop(account_id, None)
                 bui.screenmessage("Nick removed.", color=(1, 0.8, 0.3))
             config.commit()
             bui.containerwidget(edit=cnt, transition='out_scale')
-        back_btn = bui.buttonwidget(parent=cnt, size=(btn_w, 42), position=(30, 20),
+        back_btn = bui.buttonwidget(parent=cnt, size=(btn_w, 42),
+            position=(30, 20),
             label=babase.Lstr(resource='backText', fallback_value='Back'),
             autoselect=True, on_activate_call=babase.CallStrict(
-                lambda: bui.containerwidget(edit=cnt, transition='out_scale')))
+                lambda: bui.containerwidget(edit=cnt,
+                                             transition='out_scale')))
         save_btn = bui.buttonwidget(parent=cnt, size=(btn_w, 42),
             position=(c_width - btn_w - 30, 20), label='Save',
-            color=(0.25, 0.65, 0.25), autoselect=True, on_activate_call=_save)
+            color=(0.25, 0.65, 0.25), autoselect=True,
+            on_activate_call=_save)
         bui.textwidget(edit=nick_field, on_return_press_call=_save)
-        bui.containerwidget(edit=cnt, cancel_button=back_btn, start_button=save_btn)
+        bui.containerwidget(edit=cnt, cancel_button=back_btn,
+                            start_button=save_btn)
 
     def _get_nick(self, id):
         config = babase.app.config
@@ -2009,17 +2052,25 @@ class ChatWolfPartyWindow(bui.Window):
         global chatlogger
         choices = ["unmute" if is_muted else "mute", "screenmsg",
                    "addQuickReply", "removeQuickReply", "chatlogger",
-                   "player_db", "credits"]
-        DisChoices = [_getTransText("unmuteall", isBaLstr=True) if is_muted else _getTransText("muteall", isBaLstr=True),
-                      _getTransText("screenmsgoff", isBaLstr=True) if screenmsg else _getTransText("screenmsgon", isBaLstr=True),
-                      _getTransText("Add_a_Quick_Reply", isBaLstr=True),
-                      _getTransText("Remove_a_Quick_Reply", isBaLstr=True),
-                      _getTransText("chatloggeroff", isBaLstr=True) if chatlogger else _getTransText("chatloggeron", isBaLstr=True),
-                      babase.Lstr(resource="??Unknown??", fallback_value="📦 Player Database"),
-                      _getTransText("Credits_for_This", isBaLstr=True)]
+                   "wt_theme", "player_db", "credits"]
+        DisChoices = [
+            _getTransText("unmuteall", isBaLstr=True) if is_muted
+            else _getTransText("muteall", isBaLstr=True),
+            _getTransText("screenmsgoff", isBaLstr=True) if screenmsg
+            else _getTransText("screenmsgon", isBaLstr=True),
+            _getTransText("Add_a_Quick_Reply", isBaLstr=True),
+            _getTransText("Remove_a_Quick_Reply", isBaLstr=True),
+            _getTransText("chatloggeroff", isBaLstr=True) if chatlogger
+            else _getTransText("chatloggeron", isBaLstr=True),
+            babase.Lstr(resource="??Unknown??",
+                        fallback_value="🎨 Theme"),
+            babase.Lstr(resource="??Unknown??",
+                        fallback_value="📦 Player Database"),
+            _getTransText("Credits_for_This", isBaLstr=True)]
         if self._getCustomSets().get("Enable_HostInfo_Debug", False):
             choices.append("hostInfo_Debug")
-            DisChoices.append(_getTransText("Debug_for_Host_Info", isBaLstr=True))
+            DisChoices.append(_getTransText("Debug_for_Host_Info",
+                                            isBaLstr=True))
         ChatWolfPopupMenu(position=self._menu_button.get_screen_space_center(),
             scale=_get_popup_window_scale(), choices=choices,
             choices_display=DisChoices,
@@ -2041,22 +2092,30 @@ class ChatWolfPartyWindow(bui.Window):
                     break
         except Exception:
             pass
-        _is_chat_muted = _mute_account in muted_chat_names if _mute_account else False
-        choices = ["@ this guy", "start_kickvote", "kick", "remove", "mute_temp", "ban",
-                   "disable_kickvote", "mute_chat", "set_nick"]
+        _is_chat_muted = (_mute_account in muted_chat_names
+                          if _mute_account else False)
+        choices = ["@ this guy", "start_kickvote", "kick", "remove",
+                   "mute_temp", "ban", "disable_kickvote", "mute_chat",
+                   "set_nick"]
         choices_display = [
             _getTransText("Mention_this_guy", isBaLstr=True),
             kick_str,
-            babase.Lstr(resource="??Unknown??", fallback_value="Kick - %d" % client_id),
-            babase.Lstr(resource="??Unknown??", fallback_value="Remove - %d" % client_id),
+            babase.Lstr(resource="??Unknown??",
+                        fallback_value="Kick - %d" % client_id),
+            babase.Lstr(resource="??Unknown??",
+                        fallback_value="Remove - %d" % client_id),
             babase.Lstr(resource="??Unknown??", fallback_value="Mute"),
             babase.Lstr(resource="??Unknown??", fallback_value="Ban"),
             babase.Lstr(resource="??Unknown??", fallback_value="KV Disable"),
-            babase.Lstr(resource="??Unknown??", fallback_value="Unmute Chat" if _is_chat_muted else "Mute Chat"),
-            babase.Lstr(resource="??Unknown??", fallback_value="Set Nick")]
+            babase.Lstr(resource="??Unknown??",
+                        fallback_value="Unmute Chat" if _is_chat_muted
+                        else "Mute Chat"),
+            babase.Lstr(resource="??Unknown??",
+                        fallback_value="Set Nick")]
         ChatWolfPopupMenu(position=widget.get_screen_space_center(),
             scale=_get_popup_window_scale(), choices=choices,
-            choices_display=choices_display, current_choice="@ this guy", delegate=self)
+            choices_display=choices_display,
+            current_choice="@ this guy", delegate=self)
         self._popup_party_member_client_id = client_id
         self._popup_party_member_is_host = is_host
         self._popup_type = "partyMemberPress"
@@ -2096,7 +2155,6 @@ class ChatWolfPartyWindow(bui.Window):
         bs.chatmessage("سوري يحبوب🙂")
 
     def _on_color_button_press(self) -> None:
-        """افتح نافذة تغيير الألوان"""
         try:
             bui.getsound('click01').play()
             ColorPickerExact(
@@ -2111,35 +2169,11 @@ class ChatWolfPartyWindow(bui.Window):
     def _on_id_button_press(self) -> None:
         try:
             roster = bs.get_game_roster()
-            activity = bs.get_foreground_host_activity()
-            active_players = []
-            if activity:
-                active_players = getattr(activity, 'players', []) or []
-            active_by_client = {}
-            for p in active_players:
-                try:
-                    cid = p.get_client_id()
-                except Exception:
-                    cid = None
-                if cid is not None:
-                    active_by_client[cid] = p
-            if not roster and not active_players:
+            if not roster:
                 bui.getsound('error').play()
                 bui.screenmessage("لا يوجد لاعبون حالياً", color=(1, 0.5, 0.2))
                 return
-            collected = []
-            seen = set()
-            def _clean_uuid(s):
-                if not isinstance(s, str):
-                    return None
-                result = ''
-                for ch in s:
-                    if not ('\ue000' <= ch <= '\uf8ff'):
-                        result += ch
-                result = result.strip().strip("'").strip('"')
-                if len(result) == 36 and result.count('-') == 4:
-                    return result
-                return None
+
             def _clean_name(s):
                 if not isinstance(s, str):
                     return ''
@@ -2148,90 +2182,47 @@ class ChatWolfPartyWindow(bui.Window):
                     if not ('\ue000' <= ch <= '\uf8ff'):
                         result += ch
                 return result.strip().strip("'").strip('"')
-            for entry in roster:
-                if not isinstance(entry, dict):
+
+            collected = []
+            seen = set()
+            for ros in roster:
+                if not isinstance(ros, dict):
                     continue
-                client_id = entry.get('client_id', '?')
-                display = entry.get('display_string', '') or ''
-                players = entry.get('players', []) or []
-                active_player = active_by_client.get(client_id)
-                uuid_val = None
-                if active_player:
-                    try:
-                        account_id = active_player.get_account_id()
-                        if account_id:
-                            uuid_val = account_id
-                    except Exception:
-                        pass
-                if not uuid_val:
-                    uuid_val = _clean_uuid(display)
-                if not uuid_val:
-                    uuid_val = ""
-                if active_player:
-                    try:
-                        pname = active_player.getname()
-                    except Exception:
-                        pname = display
-                    try:
-                        p_id = active_player.get_id()
-                    except Exception:
-                        p_id = None
-                    state = "IN GAME"
-                    if p_id is not None:
-                        key = f"{client_id}_{uuid_val}_{p_id}_{pname}"
-                        if key not in seen:
-                            seen.add(key)
-                            collected.append({'client_id': client_id,
-                                'uuid': uuid_val, 'ppid': p_id, 'name': pname,
-                                'state': state, 'account': display})
-                elif players:
-                    for pl in players:
-                        pl_name = pl.get('name_full', pl.get('name', '?'))
-                        pl_id = pl.get('id', None)
-                        if pl_id is None:
-                            continue
-                        key = f"{client_id}_{uuid_val}_{pl_id}_{pl_name}"
-                        if key not in seen:
-                            seen.add(key)
-                            collected.append({'client_id': client_id,
-                                'uuid': uuid_val, 'ppid': pl_id, 'name': pl_name,
-                                'state': "IN LOBBY", 'account': display})
+                pbid = ros.get('account_id') or 'N/A'
+                client_id = ros.get('client_id', '?')
+                display = ros.get('display_string', '') or ''
+                clean_display = _clean_name(display) or '?'
+                state = "IN GAME" if ros.get('players') else "IN LOBBY"
+                key = f"{client_id}_{pbid}_{clean_display}"
+                if key not in seen:
+                    seen.add(key)
+                    collected.append({
+                        'client_id': client_id,
+                        'pbid': pbid,
+                        'account': clean_display,
+                        'state': state,
+                    })
             if not collected:
                 bui.getsound('error').play()
-                bui.screenmessage("فشل جلب ال uuid", color=(1, 0.5, 0.2))
+                bui.screenmessage("فشل جلب اللاعبين", color=(1, 0.5, 0.2))
                 return
-            bui.screenmessage(
-                f"Fetching PB-IDs for {len(collected)} player(s)...",
-                color=(0.5, 0.8, 1))
-            results = {'done': 0, 'total': len(collected), 'items': []}
-            def _on_each_done(idx, pbid):
-                results['done'] += 1
-                item = collected[idx].copy()
-                item['pbid'] = pbid if pbid else 'N/A'
-                results['items'].append((idx, item))
-                if results['done'] >= results['total']:
-                    results['items'].sort(key=lambda x: x[0])
-                    final_items = [i[1] for i in results['items']]
-                    choices = []
-                    for it in final_items:
-                        label = (f"| {it['client_id']} | {it['pbid']} | "
-                                f"{it['account']} | {it['state']} |")
-                        choices.append(label)
-                    if not choices:
-                        bui.screenmessage("No valid players found.", color=(1, 0.5, 0.2))
-                        return
-                    ChatWolfPopupMenu(
-                        position=self._id_button.get_screen_space_center(),
-                        scale=_get_popup_window_scale(), choices=choices,
-                        choices_display=choices, current_choice=choices[0],
-                        delegate=self)
-                    self._popup_type = "id_select"
-            for idx, item in enumerate(collected):
-                clean_name = _clean_name(item['account']) or _clean_name(item['name'])
-                _fetch_pbid_async(clean_name, lambda pbid, i=idx: _on_each_done(i, pbid))
+            choices = []
+            for it in collected:
+                choices.append(
+                    f"| {it['client_id']} | {it['pbid']} | "
+                    f"{it['account']} | {it['state']} |")
+            ChatWolfPopupMenu(
+                position=self._id_button.get_screen_space_center(),
+                scale=_get_popup_window_scale(),
+                choices=choices,
+                choices_display=choices,
+                current_choice=choices[0],
+                delegate=self)
+            self._popup_type = "id_select"
         except Exception as e:
             bui.getsound('error').play()
-            bui.screenmessage("فشل جلب اللاعبين: " + str(e), color=(1, 0.3, 0.3))
+            bui.screenmessage(f"فشل جلب اللاعبين: {e}", color=(1, 0.3, 0.3))
+            print(f"[ChatWolf] ID button error: {e}")
 
     def _chat_history_step(self, back: bool) -> None:
         msgs = bs.get_chat_messages()
@@ -2260,8 +2251,11 @@ class ChatWolfPartyWindow(bui.Window):
             text = raw.split(": ", 1)[1] if ": " in raw else raw
         except Exception:
             text = self._chat_hist_messages[self._chat_hist_index]
-        bui.textwidget(edit=self._text_field, text=text)
-        bui.textwidget(edit=self._text_field, select_all=True)
+        try:
+            bui.textwidget(edit=self._text_field, text=text)
+            bui.textwidget(edit=self._text_field, selectable=True)
+        except Exception:
+            pass
         bui.getsound('deek').play()
 
     def _send_chat_message(self) -> None:
@@ -2269,11 +2263,11 @@ class ChatWolfPartyWindow(bui.Window):
         self._chat_hist_active = False
         sendtext = bui.textwidget(query=self._text_field)
         if sendtext == ".ip":
-            bs.chatmessage("joined "+ip_add+" PORT "+str(p_port))
+            bs.chatmessage("joined " + ip_add + " PORT " + str(p_port))
             bui.textwidget(edit=self._text_field, text="")
             return
         elif sendtext == ".info":
-            if bs.get_connection_to_host_info_2() == None:
+            if bs.get_connection_to_host_info_2() is None:
                 s_build = 0
             else:
                 s_build = bs.get_connection_to_host_info_2()['build_number']
@@ -2282,13 +2276,13 @@ class ChatWolfPartyWindow(bui.Window):
                 s_v = " 1.4.148 or below"
             elif s_build <= 14377:
                 s_v = "1.4.148 < x < = 1.4.155 "
-            elif s_build >= 20001 and s_build < 20308:
+            elif 20001 <= s_build < 20308:
                 s_v = "1.5"
-            elif s_build >= 20308 and s_build < 20591:
+            elif 20308 <= s_build < 20591:
                 s_v = "1.6 "
             else:
                 s_v = "1.7 and above "
-            bs.chatmessage("script version "+s_v+"- build "+str(s_build))
+            bs.chatmessage("script version " + s_v + "- build " + str(s_build))
             bui.textwidget(edit=self._text_field, text="")
             return
         elif sendtext == ".ping":
@@ -2301,7 +2295,7 @@ class ChatWolfPartyWindow(bui.Window):
         elif sendtext == ".save":
             info = bs.get_connection_to_host_info_2()
             config = babase.app.config
-            if info != None and info.get('name', '') != '':
+            if info is not None and info.get('name', '') != '':
                 title = info['name']
                 if not isinstance(config.get('Saved Servers'), dict):
                     config['Saved Servers'] = {}
@@ -2334,14 +2328,14 @@ class ChatWolfPartyWindow(bui.Window):
         msg = sendtext
         msg1 = msg.split(" ")
         ms2 = ""
-        if (len(msg1) > 11):
-            hp = int(len(msg1)/2)
+        if len(msg1) > 11:
+            hp = int(len(msg1) / 2)
             for m in range(0, hp):
-                ms2 = ms2+" "+msg1[m]
+                ms2 = ms2 + " " + msg1[m]
             bs.chatmessage(ms2)
             ms2 = ""
             for m in range(hp, len(msg1)):
-                ms2 = ms2+" "+msg1[m]
+                ms2 = ms2 + " " + msg1[m]
             bs.chatmessage(ms2)
         else:
             bs.chatmessage(msg)
@@ -2355,17 +2349,19 @@ class ChatWolfPartyWindow(bui.Window):
                 os.makedirs(RecordFilesDir)
             if not os.path.isfile(filePath):
                 with open(filePath, "wb") as writer:
-                    writer.write(("/custom3 210 add  permanent\\n/thawall\\n/maxPlayers 15\\n/par l\\n"
-                                 "/par spark 123 size=3\\n/lm\\n/give srounder_chef\\n/quit\\n/sm\\n"
-                                 "/end\\n/admin 153 add permanent").encode("UTF-8"))
+                    writer.write(("/custom3 210 add  permanent\\n/thawall\\n"
+                                  "/maxPlayers 15\\n/par l\\n"
+                                  "/par spark 123 size=3\\n/lm\\n"
+                                  "/give srounder_chef\\n/quit\\n/sm\\n"
+                                  "/end\\n/admin 153 add permanent").encode("UTF-8"))
             if os.path.getmtime(filePath) != self._caches.get("Vertify_Quickresponse_Text"):
                 with open(filePath, "r+", encoding="utf-8") as Reader:
                     Text = Reader.read()
                     if Text.startswith(str(codecs.BOM_UTF8)):
                         Text = Text[3:]
-                    self._caches["quickReplys"] = (Text).split("\\n")
+                    self._caches["quickReplys"] = Text.split("\\n")
                     self._caches["Vertify_Quickresponse_Text"] = os.path.getmtime(filePath)
-            return (self._caches.get("quickReplys", []))
+            return self._caches.get("quickReplys", [])
         except Exception:
             babase.print_exception()
             bs.broadcastmessage(babase.Lstr(resource="errorText"), (1, 0, 0))
@@ -2402,8 +2398,9 @@ class ChatWolfPartyWindow(bui.Window):
                             self._caches["Vertify_MainSettings.json_Text"] = os.path.getmtime(filePath)
                 except Exception:
                     babase.print_exception()
-            return (self._caches.get("PartyWindow_Sets") if isinstance(
-                self._caches.get("PartyWindow_Sets"), dict) else {})
+            return (self._caches.get("PartyWindow_Sets")
+                    if isinstance(self._caches.get("PartyWindow_Sets"), dict)
+                    else {})
         except Exception:
             babase.print_exception()
 
@@ -2418,46 +2415,45 @@ class ChatWolfPartyWindow(bui.Window):
                     output += [roster]
                 elif type.find("player") != -1 and roster["players"] != []:
                     if type.find("namefull") != -1:
-                        output += [(i["name_full"]) for i in roster["players"]]
+                        output += [i["name_full"] for i in roster["players"]]
                     elif type.find("name") != -1:
-                        output += [(i["name"]) for i in roster["players"]]
+                        output += [i["name"] for i in roster["players"]]
                     elif type.find("playerid") != -1:
                         output += [i["id"] for i in roster["players"]]
                 elif type.lower() in ("account", "displaystring"):
-                    output += [(roster["display_string"])]
+                    output += [roster["display_string"]]
             elif roster["client_id"] == ID and not type.startswith("all"):
                 try:
                     if type in ("roster", "fullrecord"):
-                        return (roster)
+                        return roster
                     elif type.find("player") != -1 and roster["players"] != []:
                         if len(roster["players"]) == 1 or type.find("singleplayer") != -1:
                             if type.find("namefull") != -1:
-                                return ((roster["players"][0]["name_full"]))
+                                return roster["players"][0]["name_full"]
                             elif type.find("name") != -1:
-                                return ((roster["players"][0]["name"]))
+                                return roster["players"][0]["name"]
                             elif type.find("playerid") != -1:
-                                return (roster["players"][0]["id"])
+                                return roster["players"][0]["id"]
                         else:
                             if type.find("namefull") != -1:
-                                return ([(i["name_full"]) for i in roster["players"]])
+                                return [i["name_full"] for i in roster["players"]]
                             elif type.find("name") != -1:
-                                return ([(i["name"]) for i in roster["players"]])
+                                return [i["name"] for i in roster["players"]]
                             elif type.find("playerid") != -1:
-                                return ([i["id"] for i in roster["players"]])
+                                return [i["id"] for i in roster["players"]]
                     elif type.lower() in ("account", "displaystring"):
-                        return ((roster["display_string"]))
+                        return roster["display_string"]
                 except Exception:
                     babase.print_exception()
-        return (None if len(output) == 0 else output)
+        return None if len(output) == 0 else output
 
     def _edit_text_msg_box(self, text, type="rewrite"):
         if not isinstance(type, str) or not isinstance(text, str):
             return
         type = type.lower()
-        text = (text)
         if type.find("add") != -1:
             bui.textwidget(edit=self._text_field,
-                text=bui.textwidget(query=self._text_field)+text)
+                text=bui.textwidget(query=self._text_field) + text)
         else:
             bui.textwidget(edit=self._text_field, text=text)
 
@@ -2485,7 +2481,8 @@ class ChatWolfPartyWindow(bui.Window):
             scale=(1.6 if uiscale is babase.UIScale.SMALL else
                    1.2 if uiscale is babase.UIScale.MEDIUM else 1.0),
             size=(c_width, c_height), transition='in_scale',
-            color=self._bg_color, parent=bui.get_special_widget('overlay_stack'))
+            color=self._bg_color,
+            parent=bui.get_special_widget('overlay_stack'))
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 28),
             size=(0, 0), h_align='center', v_align='center',
             text='Saved Servers', color=(1, 0.85, 0.2), scale=0.95,
@@ -2505,7 +2502,8 @@ class ChatWolfPartyWindow(bui.Window):
             gap = 6
             join_y = rh - 6 - btn_h
             rem_y = join_y - btn_h - gap
-            row = bui.containerwidget(parent=col, size=(rw, rh), background=False)
+            row = bui.containerwidget(parent=col, size=(rw, rh),
+                                      background=False)
             text_w = rw - btn_w - 18
             bui.textwidget(parent=row, position=(8, rh - 26), size=(0, 0),
                 h_align='left', v_align='center', text=srv_name,
@@ -2514,12 +2512,15 @@ class ChatWolfPartyWindow(bui.Window):
                 h_align='left', v_align='center',
                 text='IP: %s   Port: %s' % (srv_addr, srv_port),
                 color=(0.7, 0.88, 1.0), scale=0.54, maxwidth=text_w)
+
             def _join(addr=srv_addr, port=srv_port, c=cnt):
                 bui.containerwidget(edit=c, transition='out_scale')
                 newconnect_to_party(addr, int(port))
             bui.buttonwidget(parent=row, size=(btn_w, btn_h),
-                position=(btn_x, join_y), label='Join', color=(0.2, 0.65, 0.3),
-                autoselect=True, on_activate_call=_join)
+                position=(btn_x, join_y), label='Join',
+                color=(0.2, 0.65, 0.3), autoselect=True,
+                on_activate_call=_join)
+
             def _delete(idx=i, c=cnt):
                 svrs = self._get_saved_servers()
                 if 0 <= idx < len(svrs):
@@ -2539,13 +2540,18 @@ class ChatWolfPartyWindow(bui.Window):
         btn_y = 10
         btn_w = 148
         gap = (c_width - btn_w * 3) // 4
-        bui.buttonwidget(parent=cnt, size=(btn_w, 42), position=(gap, btn_y),
-            label='+ Add Server', color=(0.25, 0.55, 0.8), autoselect=True,
-            on_activate_call=babase.CallPartial(self._open_add_server_window, cnt))
+        bui.buttonwidget(parent=cnt, size=(btn_w, 42),
+            position=(gap, btn_y),
+            label='+ Add Server', color=(0.25, 0.55, 0.8),
+            autoselect=True,
+            on_activate_call=babase.CallPartial(
+                self._open_add_server_window, cnt))
+
         def _add_this_server():
             info = bs.get_connection_to_host_info_2()
             if not info:
-                bui.screenmessage('Not connected to any server!', color=(1, 0.3, 0.3))
+                bui.screenmessage('Not connected to any server!',
+                                  color=(1, 0.3, 0.3))
                 bui.getsound('error').play()
                 return
             if isinstance(info, dict):
@@ -2554,32 +2560,39 @@ class ChatWolfPartyWindow(bui.Window):
                 srv_port = info.get('port', 43210)
             else:
                 srv_name = getattr(info, 'name', 'Unknown')
-                srv_addr = getattr(info, 'addr', getattr(info, 'address', ''))
+                srv_addr = getattr(info, 'addr',
+                                   getattr(info, 'address', ''))
                 srv_port = getattr(info, 'port', 43210)
             if not srv_addr:
-                bui.screenmessage('Could not get server address!', color=(1, 0.3, 0.3))
+                bui.screenmessage('Could not get server address!',
+                                  color=(1, 0.3, 0.3))
                 bui.getsound('error').play()
                 return
             svrs = self._get_saved_servers()
             for s in svrs:
                 if s.get('addr') == srv_addr and s.get('port') == srv_port:
-                    bui.screenmessage('Server already saved!', color=(1, 0.8, 0.2))
+                    bui.screenmessage('Server already saved!',
+                                      color=(1, 0.8, 0.2))
                     bui.getsound('error').play()
                     return
-            svrs.append({'name': srv_name, 'addr': srv_addr, 'port': int(srv_port)})
+            svrs.append({'name': srv_name, 'addr': srv_addr,
+                         'port': int(srv_port)})
             self._write_saved_servers(svrs)
             bui.getsound('gunCocking').play()
-            bui.screenmessage("'%s' saved!" % srv_name, color=(0.2, 1, 0.4))
+            bui.screenmessage("'%s' saved!" % srv_name,
+                              color=(0.2, 1, 0.4))
             bui.containerwidget(edit=cnt, transition='out_scale')
             self._open_saved_servers_window()
         bui.buttonwidget(parent=cnt, size=(btn_w, 42),
             position=(gap * 2 + btn_w, btn_y), label='+ This Server',
-            color=(0.2, 0.6, 0.4), autoselect=True, on_activate_call=_add_this_server)
+            color=(0.2, 0.6, 0.4), autoselect=True,
+            on_activate_call=_add_this_server)
         cancel_btn = bui.buttonwidget(parent=cnt, size=(btn_w, 42),
             position=(gap * 3 + btn_w * 2, btn_y),
             label=babase.Lstr(resource='backText', fallback_value='Back'),
             autoselect=True, on_activate_call=babase.CallStrict(
-                lambda: bui.containerwidget(edit=cnt, transition='out_scale')))
+                lambda: bui.containerwidget(edit=cnt,
+                                             transition='out_scale')))
         bui.containerwidget(edit=cnt, cancel_button=cancel_btn)
 
     def _open_add_server_window(self, parent_cnt=None) -> None:
@@ -2595,7 +2608,8 @@ class ChatWolfPartyWindow(bui.Window):
             scale=(1.75 if uiscale is babase.UIScale.SMALL else
                    1.3 if uiscale is babase.UIScale.MEDIUM else 1.0),
             size=(c_width, c_height), transition='in_scale',
-            color=self._bg_color, parent=bui.get_special_widget('overlay_stack'))
+            color=self._bg_color,
+            parent=bui.get_special_widget('overlay_stack'))
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 28),
             size=(0, 0), h_align='center', v_align='center',
             text='Add Server', color=(1, 0.85, 0.2), scale=0.9,
@@ -2608,17 +2622,17 @@ class ChatWolfPartyWindow(bui.Window):
             color=lbl_color, scale=lbl_scale)
         name_field = bui.textwidget(parent=cnt, size=(field_w, 36),
             position=(40, c_height - 108), text='', editable=True,
-            description='e.g. My Fav Server', h_align='left', v_align='center',
-            autoselect=True, maxwidth=field_w - 10, max_chars=40,
-            scale=0.65, corner_scale=0.7)
+            description='e.g. My Fav Server', h_align='left',
+            v_align='center', autoselect=True, maxwidth=field_w - 10,
+            max_chars=40, scale=0.65, corner_scale=0.7)
         bui.textwidget(parent=cnt, position=(40, c_height - 138), size=(0, 0),
             h_align='left', v_align='center', text='IP Address:',
             color=lbl_color, scale=lbl_scale)
         ip_field = bui.textwidget(parent=cnt, size=(field_w, 36),
             position=(40, c_height - 178), text='', editable=True,
-            description='e.g. 192.168.1.1', h_align='left', v_align='center',
-            autoselect=True, maxwidth=field_w - 10, max_chars=64,
-            scale=0.65, corner_scale=0.7)
+            description='e.g. 192.168.1.1', h_align='left',
+            v_align='center', autoselect=True, maxwidth=field_w - 10,
+            max_chars=64, scale=0.65, corner_scale=0.7)
         bui.textwidget(parent=cnt, position=(40, c_height - 205), size=(0, 0),
             h_align='left', v_align='center', text='Port:',
             color=lbl_color, scale=lbl_scale)
@@ -2627,18 +2641,21 @@ class ChatWolfPartyWindow(bui.Window):
             description='e.g. 43210', h_align='left', v_align='center',
             autoselect=True, maxwidth=110, max_chars=6, scale=0.65,
             corner_scale=0.7)
+
         def _save():
             srv_name = bui.textwidget(query=name_field).strip()
             srv_addr = bui.textwidget(query=ip_field).strip()
             srv_port_str = bui.textwidget(query=port_field).strip()
             if not srv_addr:
-                bui.screenmessage('IP address cannot be empty!', color=(1, 0.3, 0.3))
+                bui.screenmessage('IP address cannot be empty!',
+                                  color=(1, 0.3, 0.3))
                 bui.getsound('error').play()
                 return
             try:
                 srv_port = int(srv_port_str)
             except ValueError:
-                bui.screenmessage('Port must be a number!', color=(1, 0.3, 0.3))
+                bui.screenmessage('Port must be a number!',
+                                  color=(1, 0.3, 0.3))
                 bui.getsound('error').play()
                 return
             if not srv_name:
@@ -2646,28 +2663,35 @@ class ChatWolfPartyWindow(bui.Window):
             servers = self._get_saved_servers()
             for s in servers:
                 if s.get('addr') == srv_addr and s.get('port') == srv_port:
-                    bui.screenmessage('Server already saved!', color=(1, 0.8, 0.2))
+                    bui.screenmessage('Server already saved!',
+                                      color=(1, 0.8, 0.2))
                     bui.getsound('error').play()
                     return
-            servers.append({'name': srv_name, 'addr': srv_addr, 'port': srv_port})
+            servers.append({'name': srv_name, 'addr': srv_addr,
+                            'port': srv_port})
             self._write_saved_servers(servers)
             bui.getsound('gunCocking').play()
-            bui.screenmessage("Server '%s' saved!" % srv_name, color=(0.2, 1, 0.4))
+            bui.screenmessage("Server '%s' saved!" % srv_name,
+                              color=(0.2, 1, 0.4))
             bui.containerwidget(edit=cnt, transition='out_scale')
             self._open_saved_servers_window()
         save_btn = bui.buttonwidget(parent=cnt, size=(160, 44),
             position=(c_width * 0.5 - 85, 12), label='Save',
-            color=(0.25, 0.65, 0.3), autoselect=True, on_activate_call=_save)
+            color=(0.25, 0.65, 0.3), autoselect=True,
+            on_activate_call=_save)
         cancel_btn = bui.buttonwidget(parent=cnt, size=(100, 44),
             position=(c_width * 0.5 + 85, 12),
             label=babase.Lstr(resource='backText', fallback_value='Back'),
             autoselect=True, on_activate_call=babase.CallStrict(
-                lambda: bui.containerwidget(edit=cnt, transition='out_scale')))
-        bui.containerwidget(edit=cnt, cancel_button=cancel_btn, start_button=save_btn)
+                lambda: bui.containerwidget(edit=cnt,
+                                             transition='out_scale')))
+        bui.containerwidget(edit=cnt, cancel_button=cancel_btn,
+                            start_button=save_btn)
         bui.widget(edit=name_field, down_widget=ip_field)
         bui.widget(edit=ip_field, down_widget=port_field)
         bui.widget(edit=port_field, down_widget=save_btn)
-        bui.textwidget(edit=port_field, on_return_press_call=save_btn.activate)
+        bui.textwidget(edit=port_field,
+                       on_return_press_call=save_btn.activate)
 
     def _open_credits_window(self) -> None:
         uiscale = bui.app.ui_v1.uiscale
@@ -2677,14 +2701,15 @@ class ChatWolfPartyWindow(bui.Window):
             scale=(1.7 if uiscale is babase.UIScale.SMALL else
                    1.3 if uiscale is babase.UIScale.MEDIUM else 1.0),
             size=(c_width, c_height), transition='in_scale',
-            color=self._bg_color, parent=bui.get_special_widget('overlay_stack'))
+            color=self._bg_color,
+            parent=bui.get_special_widget('overlay_stack'))
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 28),
             size=(0, 0), h_align='center', v_align='center',
             text='CHATT WOLF', color=(1, 0.85, 0.2), scale=0.95,
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 60),
             size=(0, 0), h_align='center', v_align='center',
-            text='Version 1.13', color=(0.3, 1, 0.3), scale=0.62,
+            text='Version 1.16', color=(0.3, 1, 0.3), scale=0.62,
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 90),
             size=(0, 0), h_align='center', v_align='center',
@@ -2692,8 +2717,8 @@ class ChatWolfPartyWindow(bui.Window):
             maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 118),
             size=(0, 0), h_align='center', v_align='center',
-            text='discord.gg/CScj4tauz', color=(0.55, 0.75, 1.0), scale=0.58,
-            maxwidth=c_width * 0.85)
+            text='discord.gg/CScj4tauz', color=(0.55, 0.75, 1.0),
+            scale=0.58, maxwidth=c_width * 0.85)
         bui.textwidget(parent=cnt, position=(c_width * 0.5, c_height - 140),
             size=(0, 0), h_align='center', v_align='center',
             text='─' * 38, color=(0.35, 0.45, 0.35), scale=0.45,
@@ -2703,9 +2728,11 @@ class ChatWolfPartyWindow(bui.Window):
         btn_w = 175
         padding = 12
         back_btn = bui.buttonwidget(parent=cnt, size=(btn_w, btn_h),
-            position=(padding, btn_y), label=babase.Lstr(resource='backText'),
+            position=(padding, btn_y),
+            label=babase.Lstr(resource='backText'),
             autoselect=True, on_activate_call=babase.CallStrict(
-                lambda: bui.containerwidget(edit=cnt, transition='out_scale')))
+                lambda: bui.containerwidget(edit=cnt,
+                                             transition='out_scale')))
         bui.buttonwidget(parent=cnt, size=(btn_w, btn_h),
             position=(c_width - btn_w - padding, btn_y),
             label='Join Our Discord', color=(0.3, 0.4, 0.8),
@@ -2720,12 +2747,14 @@ class ChatWolfPartyWindow(bui.Window):
             if current_ping == 0:
                 bui.buttonwidget(edit=self.ping_widget, label="0")
             else:
-                bui.buttonwidget(edit=self.ping_widget, label=str(current_ping))
+                bui.buttonwidget(edit=self.ping_widget,
+                                 label=str(current_ping))
         except Exception:
             pass
         roster = bs.get_game_roster()
         global f_chat, smo_mode
-        if roster != self._roster or smo_mode != self.roster_mode or f_chat != self.full_chat_mode:
+        if (roster != self._roster or smo_mode != self.roster_mode
+                or f_chat != self.full_chat_mode):
             self._roster = roster
             smo_mode = self.roster_mode
             f_chat = self.full_chat_mode
@@ -2737,15 +2766,18 @@ class ChatWolfPartyWindow(bui.Window):
                 bui.textwidget(edit=self._empty_str,
                     text=babase.Lstr(resource=self._r + '.emptyText'))
                 bui.scrollwidget(edit=self._scrollwidget,
-                    size=(self._width - 50, self._height - top_section_height - 110),
+                    size=(self._width - 50,
+                          self._height - top_section_height - 110),
                     position=(30, 80))
             elif self.full_chat_mode:
                 top_section_height = 60
                 bui.scrollwidget(edit=self._scrollwidget,
-                    size=(self._width - 50, self._height - top_section_height - 75),
+                    size=(self._width - 50,
+                          self._height - top_section_height - 75),
                     position=(30, 80))
             else:
-                columns = 1 if len(self._roster) == 1 else 2 if len(self._roster) == 2 else 3
+                columns = (1 if len(self._roster) == 1 else
+                           2 if len(self._roster) == 2 else 3)
                 rows = int(math.ceil(float(len(self._roster)) / columns))
                 c_width = (self._width * 0.9) / max(3, columns)
                 c_width_total = c_width * columns
@@ -2760,12 +2792,14 @@ class ChatWolfPartyWindow(bui.Window):
                                    c_width * x - 23,
                                    self._height - 65 - c_height * y - 15)
                             try:
-                                if self.roster_mode == 1 and self._roster[index]['players']:
+                                if (self.roster_mode == 1
+                                        and self._roster[index]['players']):
                                     if len(self._roster[index]['players']) == 1:
                                         p_str = self._roster[index]['players'][0]['name_full']
                                     else:
-                                        p_str = ('/'.join([entry['name'] for entry in
-                                                          self._roster[index]['players']]))
+                                        p_str = ('/'.join([entry['name']
+                                            for entry in
+                                            self._roster[index]['players']]))
                                         if len(p_str) > 25:
                                             p_str = p_str[:25] + '...'
                                 elif self.roster_mode == 0:
@@ -2776,11 +2810,13 @@ class ChatWolfPartyWindow(bui.Window):
                             except Exception:
                                 p_str = '???'
                             try:
-                                widget = bui.textwidget(parent=self._root_widget,
-                                    position=(pos[0], pos[1]), scale=t_scale,
+                                widget = bui.textwidget(
+                                    parent=self._root_widget,
+                                    position=(pos[0], pos[1]),
+                                    scale=t_scale,
                                     size=(c_width * 0.85, 30),
                                     maxwidth=c_width * 0.85,
-                                    color=(1, 1, 1) if index == 0 else (1, 1, 1),
+                                    color=(1, 1, 1),
                                     selectable=True, autoselect=True,
                                     click_activate=True,
                                     text=babase.Lstr(value=p_str),
@@ -2789,7 +2825,7 @@ class ChatWolfPartyWindow(bui.Window):
                             except Exception:
                                 pass
                             if self._roster[index]['client_id'] is not None:
-                                is_host = self._roster[index]['client_id'] == -1
+                                is_host = (self._roster[index]['client_id'] == -1)
                             else:
                                 is_host = (index == 0)
                             try:
@@ -2809,21 +2845,26 @@ class ChatWolfPartyWindow(bui.Window):
                                         suppress_warning=True) * t_scale)
                                 try:
                                     self._name_widgets.append(
-                                        bui.textwidget(parent=self._root_widget,
-                                            position=(pos[0] + twd + 1, pos[1] - 0.5),
+                                        bui.textwidget(
+                                            parent=self._root_widget,
+                                            position=(pos[0] + twd + 1,
+                                                      pos[1] - 0.5),
                                             size=(0, 0), h_align='left',
                                             v_align='center',
                                             maxwidth=c_width * 0.96 - twd,
                                             color=(0.1, 1, 0.1, 0.5),
-                                            text=babase.Lstr(resource=self._r + '.hostText'),
-                                            scale=0.4, shadow=0.1, flatness=1.0))
+                                            text=babase.Lstr(
+                                                resource=self._r + '.hostText'),
+                                            scale=0.4, shadow=0.1,
+                                            flatness=1.0))
                                 except Exception:
                                     pass
                 try:
                     bui.textwidget(edit=self._empty_str, text='')
                     bui.scrollwidget(edit=self._scrollwidget,
                         size=(self._width - 50,
-                              max(100, self._height - 139 - c_height_total)),
+                              max(100,
+                                  self._height - 139 - c_height_total)),
                         position=(30, 80))
                 except Exception:
                     pass
@@ -2834,7 +2875,8 @@ class ChatWolfPartyWindow(bui.Window):
 
     def hide_screen_msg(self):
         try:
-            with open('ba_data/data/languages/english.json', encoding='utf-8') as file:
+            with open('ba_data/data/languages/english.json',
+                      encoding='utf-8') as file:
                 eng = json.loads(file.read())
             eng['internal']['playerJoinedPartyText'] = ''
             eng['internal']['playerLeftPartyText'] = ''
@@ -2847,10 +2889,12 @@ class ChatWolfPartyWindow(bui.Window):
             eng['playerDelayedJoinText'] = ''
             eng['playerLeftText'] = ''
             eng['kickQuestionText'] = ''
-            with open('ba_data/data/languages/english.json', 'w', encoding='utf-8') as file:
+            with open('ba_data/data/languages/english.json', 'w',
+                      encoding='utf-8') as file:
                 json.dump(eng, file)
         except Exception:
             pass
+
         def _reload():
             try:
                 lang = babase.app.config.get('Lang', 'English') or 'English'
@@ -2861,7 +2905,8 @@ class ChatWolfPartyWindow(bui.Window):
 
     def restore_screen_msg(self):
         try:
-            with open('ba_data/data/languages/english.json', encoding='utf-8') as file:
+            with open('ba_data/data/languages/english.json',
+                      encoding='utf-8') as file:
                 eng = json.loads(file.read())
             eng['internal']['playerJoinedPartyText'] = "${NAME} joined the pawri!"
             eng['internal']['playerLeftPartyText'] = "${NAME} left the pawri."
@@ -2874,10 +2919,12 @@ class ChatWolfPartyWindow(bui.Window):
             eng['internal']['playerDelayedJoinText'] = "${PLAYER} will enter at the start of the next round."
             eng['internal']['playerLeftText'] = "${PLAYER} left the game."
             eng['internal']['kickQuestionText'] = "Kick ${NAME}?"
-            with open('ba_data/data/languages/english.json', 'w', encoding='utf-8') as file:
+            with open('ba_data/data/languages/english.json', 'w',
+                      encoding='utf-8') as file:
                 json.dump(eng, file)
         except Exception:
             pass
+
         def _reload():
             try:
                 lang = babase.app.config.get('Lang', 'English') or 'English'
@@ -2896,8 +2943,9 @@ class ChatWolfPartyWindow(bui.Window):
                         data = self._get_quick_responds()
                         data.append(newReply)
                         self._write_quick_responds(data)
-                        bs.broadcastmessage(_getTransText("Something_is_added") %
-                                            newReply, color=(0, 1, 0))
+                        bs.broadcastmessage(
+                            _getTransText("Something_is_added") % newReply,
+                            color=(0, 1, 0))
                         bui.getsound("dingSmallHigh").play()
                     else:
                         bui.getsound("error").play()
@@ -2907,8 +2955,10 @@ class ChatWolfPartyWindow(bui.Window):
             elif choice == "__apw_remove_quick__":
                 Quickreply = self._get_quick_responds()
                 if len(Quickreply) > 0:
-                    ChatWolfPopupMenu(position=self._times_button.get_screen_space_center(),
-                        scale=_get_popup_window_scale(), choices=Quickreply,
+                    ChatWolfPopupMenu(
+                        position=self._times_button.get_screen_space_center(),
+                        scale=_get_popup_window_scale(),
+                        choices=Quickreply,
                         choices_display=_creat_Lstr_list(Quickreply),
                         current_choice=Quickreply[0], delegate=self)
                     self._popup_type = "removeQuickReplySelect"
@@ -2919,7 +2969,7 @@ class ChatWolfPartyWindow(bui.Window):
                 self._edit_text_msg_box(choice, "rewrite")
                 try:
                     bui.containerwidget(edit=self._root_widget,
-                        selected_child=self._text_field)
+                                        selected_child=self._text_field)
                 except Exception:
                     pass
             except Exception:
@@ -2929,7 +2979,7 @@ class ChatWolfPartyWindow(bui.Window):
                 self._edit_text_msg_box(choice + ' ', "add")
                 try:
                     bui.containerwidget(edit=self._root_widget,
-                        selected_child=self._text_field)
+                                        selected_child=self._text_field)
                 except Exception:
                     pass
             except Exception:
@@ -2942,7 +2992,8 @@ class ChatWolfPartyWindow(bui.Window):
                     self._write_quick_responds(data)
                     bs.broadcastmessage(
                         _getTransText("Something_is_removed", same_fb=True) % choice
-                        if "%s" in _getTransText("Something_is_removed", same_fb=True)
+                        if "%s" in _getTransText("Something_is_removed",
+                                                  same_fb=True)
                         else '"%s" removed' % choice, color=(1, 0.5, 0))
                     bui.getsound("dingSmallHigh").play()
             except Exception:
@@ -2961,7 +3012,8 @@ class ChatWolfPartyWindow(bui.Window):
                 if ban_time == 0:
                     cmd = "/ban %d" % self._popup_party_member_client_id
                 else:
-                    cmd = "/ban %d %d" % (self._popup_party_member_client_id, ban_time)
+                    cmd = "/ban %d %d" % (self._popup_party_member_client_id,
+                                          ban_time)
                 bs.chatmessage(cmd)
             except Exception:
                 bui.getsound('error').play()
@@ -2972,7 +3024,8 @@ class ChatWolfPartyWindow(bui.Window):
                 if mute_seconds == 0:
                     cmd = "/mute %d" % self._popup_party_member_client_id
                 else:
-                    cmd = "/mute %d %d" % (self._popup_party_member_client_id, mute_seconds)
+                    cmd = "/mute %d %d" % (self._popup_party_member_client_id,
+                                           mute_seconds)
                 bs.chatmessage(cmd)
             except Exception:
                 bui.getsound('error').play()
@@ -2981,9 +3034,11 @@ class ChatWolfPartyWindow(bui.Window):
             pass
         elif self._popup_type == "chatmessagepress":
             if choice == "mute":
-                unmuted_names.remove(self.msg_user_selected.split(":")[0].encode('utf-8'))
+                unmuted_names.remove(self.msg_user_selected.split(":")[0]
+                                     .encode('utf-8'))
             if choice == "unmute":
-                unmuted_names.append(self.msg_user_selected.split(":")[0].encode('utf-8'))
+                unmuted_names.append(self.msg_user_selected.split(":")[0]
+                                     .encode('utf-8'))
             if choice == "copy":
                 self._copy_msg(self.msg_user_selected)
             if choice == "reply":
@@ -2996,16 +3051,18 @@ class ChatWolfPartyWindow(bui.Window):
                 self._edit_text_msg_box(reply_text, "rewrite")
                 try:
                     bui.containerwidget(edit=self._root_widget,
-                        selected_child=self._text_field)
+                                        selected_child=self._text_field)
                 except Exception:
                     pass
         elif self._popup_type == "partyMemberPress":
             if choice == "start_kickvote":
-                result = bs.disconnect_client(self._popup_party_member_client_id, ban_time=0)
+                result = bs.disconnect_client(
+                    self._popup_party_member_client_id, ban_time=0)
                 if not result:
                     bui.getsound('error').play()
                     bs.broadcastmessage(
-                        babase.Lstr(resource='getTicketsWindow.unavailableText'),
+                        babase.Lstr(
+                            resource='getTicketsWindow.unavailableText'),
                         color=(1, 0, 0))
             elif choice == "kick":
                 bs.chatmessage("/kick %d" % self._popup_party_member_client_id)
@@ -3028,9 +3085,11 @@ class ChatWolfPartyWindow(bui.Window):
                     choices_display=_creat_Lstr_list(mute_labels),
                     current_choice=str(mute_choices[0]), delegate=self)
             elif choice == "disable_kickvote":
-                bs.chatmessage("/kickvote disable %d" % self._popup_party_member_client_id)
-                bs.broadcastmessage(_getTransText("kickvote_disabled", same_fb=True),
-                                    color=(0.5, 1, 1))
+                bs.chatmessage(
+                    "/kickvote disable %d" % self._popup_party_member_client_id)
+                bs.broadcastmessage(
+                    _getTransText("kickvote_disabled", same_fb=True),
+                    color=(0.5, 1, 1))
             elif choice == "mute_chat":
                 global muted_chat_names
                 account = self._getObjectByID("account")
@@ -3067,7 +3126,8 @@ class ChatWolfPartyWindow(bui.Window):
                 if account:
                     self._open_set_nick_window(account)
                 else:
-                    bui.screenmessage("Could not get player ID.", color=(1, 0.3, 0.3))
+                    bui.screenmessage("Could not get player ID.",
+                                      color=(1, 0.3, 0.3))
             elif choice == "@ this guy":
                 NameChoices = []
                 account = self._getObjectByID("account")
@@ -3091,13 +3151,26 @@ class ChatWolfPartyWindow(bui.Window):
                         color=(1, 0, 0))
                 else:
                     ChatWolfPopupMenu(
-                        position=popup_window.root_widget.get_screen_space_center(),
-                        scale=_get_popup_window_scale(), choices=NameChoices,
+                        position=popup_window.root_widget
+                        .get_screen_space_center(),
+                        scale=_get_popup_window_scale(),
+                        choices=NameChoices,
                         choices_display=_creat_Lstr_list(NameChoices),
                         current_choice=NameChoices[0], delegate=self)
                     self._popup_type = "MentionSelect"
         elif self._popup_type == "menu":
-            if choice in ("mute", "unmute"):
+            if choice == "wt_theme":
+                wt_choices = WT_THEME_ORDER + ['WT_FX', 'WT_SPEED']
+                wt_display = WT_THEME_ORDER + ['🎬 FX level', '⏱️ Speed']
+                ChatWolfPopupMenu(
+                    position=self._menu_button.get_screen_space_center(),
+                    scale=_get_popup_window_scale(),
+                    choices=wt_choices,
+                    choices_display=[babase.Lstr(value=d)
+                                     for d in wt_display],
+                    current_choice=self._wt_theme_name,
+                    delegate=_WTPicker(self))
+            elif choice in ("mute", "unmute"):
                 cfg = babase.app.config
                 cfg['Chat Muted'] = (choice == 'mute')
                 cfg.apply_and_commit()
@@ -3137,8 +3210,9 @@ class ChatWolfPartyWindow(bui.Window):
                     data = self._get_quick_responds()
                     data.append(newReply)
                     self._write_quick_responds(data)
-                    bs.broadcastmessage(_getTransText("Something_is_added") %
-                                        newReply, color=(0, 1, 0))
+                    bs.broadcastmessage(
+                        _getTransText("Something_is_added") % newReply,
+                        color=(0, 1, 0))
                     bui.getsound("dingSmallHigh").play()
                 except Exception:
                     babase.print_exception()
@@ -3156,8 +3230,11 @@ class ChatWolfPartyWindow(bui.Window):
             except Exception:
                 pass
 
-# ba_meta export babase.Plugin
+# ============================================================
+# ========== PLUGIN ==========
+# ============================================================
 
+# ba_meta export babase.Plugin
 class ChatWolfPlugin(babase.Plugin):
     def __init__(self):
         try:
@@ -3183,8 +3260,10 @@ class ChatWolfPlugin(babase.Plugin):
             except Exception:
                 pass
             return
+
         def _repair_thread():
             ok = _apw_download_update("crash-repair")
+
             def _notify():
                 try:
                     if ok:
